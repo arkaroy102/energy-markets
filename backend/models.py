@@ -1,0 +1,59 @@
+from sqlalchemy import (
+    Column, Integer, String, Float, DateTime,
+    ForeignKey, UniqueConstraint, Index
+)
+from typing import List
+from datetime import datetime
+
+from sqlalchemy.orm import mapped_column
+from sqlalchemy.orm import Mapped
+from sqlalchemy.orm import relationship
+
+from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy import Enum as SQLEnum
+from enum import Enum
+
+class GridEnum(str, Enum):
+    ERCOT = "ERCOT"
+    NYISO = "NYISO"
+    CAISO = "CAISO"
+
+class NodeTypeEnum(str, Enum):
+    ELECTRICAL_BUS = "ELECTRICAL_BUS"
+
+class Base(DeclarativeBase):
+    pass
+
+class Node(Base):
+    __tablename__ = "node_table"
+
+    node_id: Mapped[int] = mapped_column(primary_key=True)
+    grid: Mapped[GridEnum] = mapped_column(SQLEnum(GridEnum, name="grid_enum"), nullable=False)
+    node_name: Mapped[str] = mapped_column(String, nullable=False)
+    node_type:  Mapped[NodeTypeEnum] = mapped_column(SQLEnum(NodeTypeEnum, name="node_type_enum"), nullable=False)
+
+    substation : Mapped[str] = mapped_column(String, nullable=True)
+    voltage_level : Mapped[float] = mapped_column(Float, nullable=True)
+    settlement_load_zone : Mapped[str] = mapped_column(String, nullable=True)
+
+    prices: Mapped[List["NodePrice"]] = relationship(back_populates="location")
+
+    __table_args__ = (
+        UniqueConstraint("grid", "node_name", name="uq_node"),
+    )
+
+class NodePrice(Base):
+    __tablename__ = "node_price_table"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    node_id: Mapped[int] = mapped_column(ForeignKey("node_table.node_id"))
+
+    timestamp_utc: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    lmp: Mapped[float] = mapped_column(Float, nullable=False)
+
+    location: Mapped["Node"] = relationship(back_populates="prices")
+
+    __table_args__ = (
+        UniqueConstraint("node_id", "timestamp_utc", name="uq_price"),
+        Index("ix_prices_location_time", "node_id", "timestamp_utc"),
+    )

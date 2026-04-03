@@ -1,0 +1,322 @@
+from datetime import datetime
+import time, json
+from datetime import timezone
+
+from fastapi import Request
+from fastapi import FastAPI, Depends, Query
+from fastapi import HTTPException
+from sqlalchemy.orm import Session
+from sqlalchemy import func, and_
+from sqlalchemy.dialects.postgresql import insert
+
+from pydantic import BaseModel
+
+from db import engine, SessionLocal
+from models import Base, Node, NodePrice, GridEnum, NodeTypeEnum
+
+from redis_client import redis_client
+
+CACHE_KEY_LATEST_ZONE_PRICES = "latest_zone_prices"
+CACHE_TTL_SECONDS_LATEST_ZONE_PRICES = 300 # 5 minutes
+
+app = FastAPI()
+
+Base.metadata.create_all(bind=engine)
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+class LocationCreate(BaseModel):
+    grid: GridEnum
+    node_name: str
+    node_type: NodeTypeEnum
+
+@app.post("/locations")
+def create_location(grid: GridEnum, node_name: str, node_type: NodeTypeEnum, db: Session = Depends(get_db)):
+    location = LocationCreate(
+        grid=grid,
+        node_name=node_name,
+        node_type=node_type,
+    )
+    rows = insert_locations(db, [location])
+    return {
+        "node_id": rows[0].node_id,
+        "grid": rows[0].grid,
+        "node_name": rows[0].node_name,
+        "node_type": rows[0].node_type,
+    }
+
+@app.post("/locations/batch")
+def create_locations(
+    locations: list[LocationCreate],
+    db: Session = Depends(get_db),
+):
+    rows = insert_locations(db, locations)
+    return [{
+        "node_id": row.node_id,
+        "grid": row.grid,
+        "node_name": row.node_name,
+        "node_type": row.node_type,
+    } for row in rows]
+
+@app.get("/locations")
+def get_locations(
+    grid: GridEnum,
+    db: Session = Depends(get_db),
+):
+    rows = (
+        db.query(Node)
+        .filter(Node.grid == grid)
+        .all()
+    )
+
+    return [
+        {
+            "node_id": row.node_id,
+            "node_name": row.node_name,
+        }
+        for row in rows
+    ]
+
+def insert_locations(db: Session, locations: list[LocationCreate]):
+    stmt = insert(Node).values([
+        {
+            "grid" : p.grid,
+            "node_name" : p.node_name,
+            "node_type" : p.node_type,
+        }
+        for p in locations
+    ])
+
+    stmt = stmt.on_conflict_do_nothing(
+        index_elements=["grid", "node_name"]
+    ).returning(Node.node_id, Node.grid, Node.node_name, Node.node_type)
+
+    result = db.execute(stmt)
+    written_rows = result.fetchall()
+    db.commit()
+    return written_rows
+
+@app.get("/location")
+def get_location_by_node_name(
+    grid: GridEnum,
+    node_name: str,
+    db: Session = Depends(get_db),
+):
+    row = (
+        db.query(Node)
+        .filter(
+            Node.grid == grid,
+            Node.node_name == node_name,
+        )
+        .first()
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"Node name {node_name} not found")
+
+    response = {
+        "id": row.node_id,
+        "grid": row.grid,
+        "node_name": row.node_name,
+    }
+    return response
+
+class PriceCreate(BaseModel):
+    node_id: int
+    timestamp_utc: datetime
+    lmp: float
+
+def insert_prices(db: Session, prices: list[PriceCreate]):
+    stmt = insert(NodePrice).values([
+        {
+            "node_id" : p.node_id,
+            "timestamp_utc" : p.timestamp_utc,
+            "lmp" : p.lmp,
+        }
+        for p in prices
+    ])
+
+    stmt = stmt.on_conflict_do_nothing(
+        index_elements=["node_id", "timestamp_utc"]
+    )
+
+    try:
+        result = db.execute(stmt)
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_Code=500, detail=str(exc))
+
+    try:
+        redis_client.delete(CACHE_KEY_LATEST_ZONE_PRICES)
+    except Exception as exc:
+        print(f"Redis delete error: {exc}")
+
+@app.post("/prices")
+def create_price(node_id: int, timestamp_utc: datetime, lmp: float, db: Session = Depends(get_db)):
+    price = PriceCreate(
+        node_id=node_id,
+        timestamp_utc=timestamp_utc,
+        lmp=lmp,
+    )
+    insert_prices(db, [price])
+    return {}
+
+@app.post("/prices/batch")
+def create_prices(
+    prices: list[PriceCreate],
+    db: Session = Depends(get_db),
+):
+    insert_prices(db, prices)
+    return {}
+
+@app.get("/prices/{node_id}")
+def get_prices(
+    node_id: int,
+    limit: int = Query(1, ge=1),  # default = 1
+    db: Session = Depends(get_db)
+):
+    rows = (
+        db.query(NodePrice)
+        .filter(NodePrice.node_id == node_id)
+        .order_by(NodePrice.timestamp_utc.desc())
+        .limit(limit)
+        .all()
+    )
+    return rows
+
+@app.get("/latest-prices")
+def get_latest_prices(db: Session = Depends(get_db)):
+    rows = (
+        db.query(NodePrice)
+        .distinct(NodePrice.node_id)
+        .order_by(NodePrice.node_id, NodePrice.timestamp_utc.desc())
+        .all()
+    )
+
+    return [
+        {
+            "node_id": row.node_id,
+            "timestamp_utc": row.timestamp_utc,
+            "lmp": row.lmp,
+        }
+        for row in rows
+    ]
+
+@app.get("/latest-price-timestamp")
+def get_latest_prices(db: Session = Depends(get_db)):
+    latest_timestamp = db.query(func.max(NodePrice.timestamp_utc)).scalar()
+    return { "timestamp_utc": latest_timestamp }
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+@app.get("/api/latest-zone-prices")
+def get_latest_zone_prices(request: Request, db: Session = Depends(get_db)):
+    try:
+        cached = redis_client.get(CACHE_KEY_LATEST_ZONE_PRICES)
+        request.state.cache_status = "hit"
+        if cached:
+            return json.loads(cached)
+    except Exception as exc:
+        request.state.cache_status = "error"
+        print(f"Redis exception: {exc}")
+
+    request.state.cache_status = "miss"
+
+    latest_per_node = (
+        db.query(
+            NodePrice.node_id.label("node_id"),
+            func.max(NodePrice.timestamp_utc).label("latest_timestamp_utc")
+        )
+        .group_by(NodePrice.node_id)
+        .subquery()
+    )
+
+    rows = (
+        db.query(
+            Node.settlement_load_zone.label("settlement_load_zone"),
+            func.avg(NodePrice.lmp).label("avg_lmp"),
+            func.min(NodePrice.timestamp_utc).label("min_timestamp_utc"),
+            func.max(NodePrice.timestamp_utc).label("max_timestamp_utc"),
+            func.count(NodePrice.node_id).label("num_nodes"),
+        )
+        .join(
+            latest_per_node,
+            and_(
+                NodePrice.node_id == latest_per_node.c.node_id,
+                NodePrice.timestamp_utc == latest_per_node.c.latest_timestamp_utc,
+            ),
+        )
+        .join(Node, NodePrice.node_id == Node.node_id)
+        .filter(Node.settlement_load_zone.isnot(None))
+        .group_by(Node.settlement_load_zone)
+        .order_by(Node.settlement_load_zone)
+        .all()
+    )
+
+    result = [
+        {
+            "settlement_load_zone": row.settlement_load_zone,
+            "avg_lmp": float(row.avg_lmp) if row.avg_lmp is not None else None,
+            "min_timestamp_utc": row.min_timestamp_utc.replace(tzinfo=timezone.utc).isoformat(),
+            "max_timestamp_utc": row.max_timestamp_utc.replace(tzinfo=timezone.utc).isoformat(),
+            "num_nodes": row.num_nodes,
+        }
+        for row in rows
+    ]
+
+    try:
+        redis_client.setex(CACHE_KEY_LATEST_ZONE_PRICES,
+                           CACHE_TTL_SECONDS_LATEST_ZONE_PRICES,
+                           json.dumps(result))
+    except Exception as exc:
+        print(f"Redis write failed {exc}")
+
+    return result
+
+
+metrics = {}
+
+@app.middleware("http")
+async def timing_middleware(request: Request, call_next):
+    start = time.perf_counter()
+    response = await call_next(request)
+    duration = (time.perf_counter() - start)
+
+
+    key = f"{request.method} {request.url.path}"
+
+    if key not in metrics:
+        metrics[key] = {"count": 0, "total": 0.0, "cache_hit": 0.0, "cache_miss": 0.0, "cache_error": 0.0}
+
+    metrics[key]["count"] += 1
+    metrics[key]["total"] += duration
+
+    avg = metrics[key]["total"] / metrics[key]["count"]
+
+
+    print(f"{request.method} {request.url.path} took {duration:.4f}s")
+    print(f"{key} avg={avg:.4f}s last={duration:.4f}s callcount={metrics[key]["count"]}")
+
+    cache_status = getattr(request.state, "cache_status", None)
+    if cache_status:
+        if cache_status == "hit":
+            metrics[key]["cache_hit"] += 1
+        elif cache_status == "miss":
+            metrics[key]["cache_miss"] += 1
+        elif cache_status == "error":
+            metrics[key]["cache_error"] += 1
+
+        hit_rate = metrics[key]["cache_hit"]/metrics[key]["count"]
+        error_rate = metrics[key]["cache_error"]/metrics[key]["count"]
+
+        print(f"Cache hit rate: {hit_rate:.4f}, error_rate: {error_rate:.4f}")
+
+    response.headers["X-Process-Time"] = str(duration)
+    return response

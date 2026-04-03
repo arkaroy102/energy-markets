@@ -1,0 +1,64 @@
+import requests
+from zoneinfo import ZoneInfo
+from datetime import datetime, timedelta, timezone
+
+USERNAME = "arka.roy102@gmail.com"
+PASSWORD = "fac@ajk!wnv_heu9NAU"
+SUBSCRIPTION_KEY = "c23173b7e2094b1fab1fff5cc0bbd25f"
+
+SCOPE = "openid+fec253ea-0d06-4272-a5e6-b478baeecd70+offline_access"
+CLIENT_ID = "fec253ea-0d06-4272-a5e6-b478baeecd70"
+
+AUTH_URL = "https://ercotb2c.b2clogin.com/ercotb2c.onmicrosoft.com/B2C_1_PUBAPI-ROPC-FLOW/oauth2/v2.0/token\
+?username={username}\
+&password={password}\
+&grant_type=password\
+&scope=openid+fec253ea-0d06-4272-a5e6-b478baeecd70+offline_access\
+&client_id=fec253ea-0d06-4272-a5e6-b478baeecd70\
+&response_type=id_token"
+
+auth_resp = requests.post(
+    AUTH_URL.format(username=USERNAME, password=PASSWORD)
+)
+
+auth_resp.raise_for_status()
+access_token = auth_resp.json()["access_token"]
+
+base_url = "https://api.ercot.com/api/public-reports/np6-787-cd/lmp_electrical_bus"
+
+
+ct = ZoneInfo("America/Chicago")
+
+now = datetime.now(ct)
+start = (now - timedelta(minutes=10)).strftime("%Y-%m-%dT%H:%M:%S")
+end   = (now).strftime("%Y-%m-%dT%H:%M:%S")
+
+page_num = 1
+
+params = {
+    "SCEDTimestampFrom": start,
+    "SCEDTimestampTo": end,
+    "page": page_num,
+    "size": 5000,
+}
+
+headers = {
+    "Authorization": f"Bearer {access_token}",
+    "Ocp-Apim-Subscription-Key": SUBSCRIPTION_KEY,
+}
+
+total_pages = 1
+
+while page_num <= total_pages:
+
+    params["page"] = page_num
+    resp = requests.get(base_url, headers=headers, params=params, timeout=60)
+    resp.raise_for_status()
+
+    data = resp.json()
+    if page_num == 1:
+        print(data['_meta'])
+        total_pages = data['_meta']['totalPages']
+
+    print(f"Page: {data['_meta']['currentPage']} out of {total_pages}, numrecords: {len(data['data'])}")
+    page_num += 1
