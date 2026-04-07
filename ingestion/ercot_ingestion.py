@@ -20,13 +20,47 @@ metrics["serialize_prices"] = {"count" : 0, "total" : 0, "last" : 0}
 
 q = queue.Queue(maxsize=100)  # bounded queue
 
+
+def find_new_buses(rows: list, location_id_dict: dict) -> set:
+    new_buses = set()
+    for row in rows:
+        assert len(row) == 4, f"Unexpected row: {row}"
+        bus = row[2]
+        if bus not in location_id_dict and bus not in new_buses:
+            new_buses.add(bus)
+    return new_buses
+
+
+def parse_initial_maxtime(latest_db_timestamp: str | None, tz) -> datetime:
+    if latest_db_timestamp is None:
+        return datetime.min.replace(tzinfo=tz)
+    return datetime.fromisoformat(latest_db_timestamp).replace(tzinfo=timezone.utc).astimezone(tz)
+
+
+def compute_maxtime(rows: list, current_maxtime: datetime, tz) -> datetime:
+    return max(
+        (datetime.fromisoformat(row[0]).replace(tzinfo=tz) for row in rows),
+        default=current_maxtime,
+    )
+
+
+def build_price_payload(rows: list, location_id_dict: dict, tz) -> list:
+    return [
+        {
+            "node_id": location_id_dict[row[2]],
+            "timestamp_utc": datetime.fromisoformat(row[0]).replace(tzinfo=tz).astimezone(timezone.utc).isoformat(),
+            "lmp": row[3],
+        }
+        for row in rows
+    ]
+
+
 def fetcher():
     eclient = ErcotClient()
     batch_id = 0
 
     latest_db_timestamp = get_latest_timestamp()
-    print(latest_db_timestamp)
-    maxtime = datetime.fromisoformat(latest_db_timestamp).replace(tzinfo=timezone.utc).astimezone(ct) if latest_db_timestamp != None else datetime.min.replace(tzinfo=ct)
+    maxtime = parse_initial_maxtime(latest_db_timestamp, ct)
     print(maxtime)
     while True:
         t0 = time.perf_counter()
@@ -49,7 +83,7 @@ def fetcher():
             else:
                 print(f"No results fetched")
 
-            maxtime = max((datetime.fromisoformat(row[0]).replace(tzinfo=ct) for row in data['data']), default=maxtime)
+            maxtime = compute_maxtime(data['data'], maxtime, ct)
             t0_page = time.perf_counter()
         print(f"Received maxtime: {maxtime}")
         time.sleep(poll_period)
@@ -64,13 +98,9 @@ def writer():
 
         print(f"consuming batch: {batch_id}, with {len(data['data'])} records")
         t0_1 = time.perf_counter()
-        new_busses = set()
-        for row in data['data']:
-            assert len(row) == 4, f"Unexpected row: {row}"
-            electrical_bus = row[2]
-            if electrical_bus not in location_id_dict and electrical_bus not in new_busses:
-                new_busses.add(electrical_bus)
-                print(f"New bus found: {electrical_bus}")
+        new_busses = find_new_buses(data['data'], location_id_dict)
+        for bus in new_busses:
+            print(f"New bus found: {bus}")
 
         # Batch insert new_busses
         for row in put_locations(list(new_busses)):
@@ -80,9 +110,7 @@ def writer():
                 assert False, f"Could not add row: {row}"
         print(f"Node map size: {len(location_id_dict)}")
 
-        payload = [{"node_id" : location_id_dict[row[2]],
-                    "timestamp_utc" : datetime.fromisoformat(row[0]).replace(tzinfo=ct).astimezone(timezone.utc).isoformat(),
-                    "lmp" : row[3]} for row in data['data']]
+        payload = build_price_payload(data['data'], location_id_dict, ct)
         t0_2 = time.perf_counter()
         put_prices(payload)
         t0_3 = time.perf_counter()
