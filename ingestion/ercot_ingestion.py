@@ -87,7 +87,7 @@ def fetcher():
                 data['batch_id'] = batch_id
                 data['batch_done'] = data['_meta']['currentPage'] == data['_meta']['totalPages']
                 q.put(data)             # blocks if queue is full
-                logger.debug(f"Queue size after put: {q.qsize()}")
+                logger.info(f"Queue size after put: {q.qsize()}")
             else:
                 logger.info("No results fetched")
 
@@ -100,7 +100,7 @@ def fetcher():
 def writer():
     while True:
         data = q.get()         # blocks if queue is empty
-        logger.debug(f"Queue size after get: {q.qsize()}")
+        logger.info(f"Queue size after get: {q.qsize()}")
         batch_id = data['batch_id']
         batch_start_time = data['starttime']
         curr_ercot_api_time = data['ercot_api_time']
