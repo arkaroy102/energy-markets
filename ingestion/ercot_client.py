@@ -78,7 +78,3 @@ def put_prices(payload : list[dict]):
     )
 
     r.raise_for_status()
-    results = r.json()
-    if len(results) < len(payload):
-        print(f"Only inserted {len(results)} instead of {len(payload)}")
-    return results
