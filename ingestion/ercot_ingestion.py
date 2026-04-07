@@ -1,19 +1,25 @@
+import logging
+import os
 import queue
 import threading
 import time
 from zoneinfo import ZoneInfo
 from datetime import datetime, timedelta, timezone
 
+logger = logging.getLogger(__name__)
+
 from ercot_api import ErcotClient
 from ercot_client import put_locations, get_locations, put_prices, get_latest_timestamp
 
 ct = ZoneInfo("America/Chicago")
 poll_period = 2 # seconds
+num_workers = 4
 
 location_id_dict = {}
+location_dict_lock = threading.Lock()
+metrics_lock = threading.Lock()
 
 metrics = {}
-metrics["total"] = {"count" : 0, "total" : 0, "last" : 0}
 metrics["ercot_api"] = {"count" : 0, "total" : 0, "last" : 0}
 metrics["write_price"] = {"count" : 0, "total" : 0, "last" : 0}
 metrics["serialize_prices"] = {"count" : 0, "total" : 0, "last" : 0}
@@ -61,7 +67,7 @@ def fetcher():
 
     latest_db_timestamp = get_latest_timestamp()
     maxtime = parse_initial_maxtime(latest_db_timestamp, ct)
-    print(maxtime)
+    logger.info(f"Initial maxtime: {maxtime}")
     while True:
         t0 = time.perf_counter()
 
@@ -73,44 +79,48 @@ def fetcher():
             t0_1 = time.perf_counter()
             ercot_api_time = t0_1 - t0_page
 
-            print(f"Page: {data['_meta']['currentPage']} out of {data['_meta']['totalPages']}, numrecords: {data['_meta']['totalRecords']}")
+            logger.info(f"Page: {data['_meta']['currentPage']} out of {data['_meta']['totalPages']}, numrecords: {data['_meta']['totalRecords']}")
             if 'data' in data and data['_meta']['totalRecords'] > 0:
                 data['starttime'] = t0
                 data['ercot_api_time'] = ercot_api_time
                 data['batch_id'] = batch_id
                 data['batch_done'] = data['_meta']['currentPage'] == data['_meta']['totalPages']
                 q.put(data)             # blocks if queue is full
+                logger.debug(f"Queue size after put: {q.qsize()}")
             else:
-                print(f"No results fetched")
+                logger.info("No results fetched")
 
             maxtime = compute_maxtime(data['data'], maxtime, ct)
             t0_page = time.perf_counter()
-        print(f"Received maxtime: {maxtime}")
+        logger.info(f"Received maxtime: {maxtime}")
         time.sleep(poll_period)
         batch_id += 1
 
 def writer():
     while True:
         data = q.get()         # blocks if queue is empty
+        logger.debug(f"Queue size after get: {q.qsize()}")
         batch_id = data['batch_id']
         batch_start_time = data['starttime']
         curr_ercot_api_time = data['ercot_api_time']
 
-        print(f"consuming batch: {batch_id}, with {len(data['data'])} records")
+        logger.info(f"Consuming batch {batch_id} with {len(data['data'])} records")
         t0_1 = time.perf_counter()
-        new_busses = find_new_buses(data['data'], location_id_dict)
-        for bus in new_busses:
-            print(f"New bus found: {bus}")
 
-        # Batch insert new_busses
-        for row in put_locations(list(new_busses)):
-            try:
-                location_id_dict[row['node_name']] = row['node_id']
-            except:
-                assert False, f"Could not add row: {row}"
-        print(f"Node map size: {len(location_id_dict)}")
+        # Serialize location resolution across workers to avoid races on
+        # location_id_dict when multiple workers encounter the same new bus
+        with location_dict_lock:
+            new_busses = find_new_buses(data['data'], location_id_dict)
+            for bus in new_busses:
+                logger.info(f"New bus found: {bus}")
+            for row in put_locations(list(new_busses)):
+                try:
+                    location_id_dict[row['node_name']] = row['node_id']
+                except:
+                    assert False, f"Could not add row: {row}"
+            logger.debug(f"Node map size: {len(location_id_dict)}")
+            payload = build_price_payload(data['data'], location_id_dict, ct)
 
-        payload = build_price_payload(data['data'], location_id_dict, ct)
         t0_2 = time.perf_counter()
         put_prices(payload)
         t0_3 = time.perf_counter()
@@ -118,40 +128,43 @@ def writer():
 
         t1 = time.perf_counter()
 
-        metrics["serialize_prices"]["count"] += 1
-        metrics["serialize_prices"]["total"] += (t0_2 - t0_1)
-        metrics["serialize_prices"]["last"] = (t0_2 - t0_1)
+        with metrics_lock:
+            metrics["serialize_prices"]["count"] += 1
+            metrics["serialize_prices"]["total"] += (t0_2 - t0_1)
+            metrics["serialize_prices"]["last"] = (t0_2 - t0_1)
 
-        metrics["write_price"]["count"] += 1
-        metrics["write_price"]["total"] += (t0_3 - t0_2)
-        metrics["write_price"]["last"] = (t0_3 - t0_2)
+            metrics["write_price"]["count"] += 1
+            metrics["write_price"]["total"] += (t0_3 - t0_2)
+            metrics["write_price"]["last"] = (t0_3 - t0_2)
 
-        metrics["ercot_api"]["count"] += 1
-        metrics["ercot_api"]["total"] += curr_ercot_api_time
-        metrics["ercot_api"]["last"] = curr_ercot_api_time
-
-        if data['batch_done']:
-            metrics["total"]["count"] += 1
-            metrics["total"]["total"] += (t1 - batch_start_time)
-            metrics["total"]["last"] = (t1 - batch_start_time)
+            metrics["ercot_api"]["count"] += 1
+            metrics["ercot_api"]["total"] += curr_ercot_api_time
+            metrics["ercot_api"]["last"] = curr_ercot_api_time
 
             for key in metrics:
                 avg = metrics[key]["total"] / metrics[key]["count"]
-                print(f"avg {key}: {avg}, last: {metrics[key]['last']}, callcount: {metrics[key]['count']}")
+                logger.info(f"metrics [{key}] avg={avg:.4f}s last={metrics[key]['last']:.4f}s count={metrics[key]['count']}")
 
 
 if __name__ == '__main__':
+    logging.basicConfig(
+        level=os.getenv("LOG_LEVEL", "INFO").upper(),
+        format="%(asctime)s %(threadName)-12s %(levelname)-8s %(message)s",
+    )
+
     for row in get_locations():
         try:
             location_id_dict[row['node_name']] = row['node_id']
         except:
-            print(f"Could not add row: {row}")
+            logger.warning(f"Could not add row: {row}")
 
-    t1 = threading.Thread(target=fetcher)
-    t2 = threading.Thread(target=writer)
+    fetcher_thread = threading.Thread(target=fetcher, name="fetcher")
+    worker_threads = [threading.Thread(target=writer, name=f"writer-{i}") for i in range(num_workers)]
 
-    t1.start()
-    t2.start()
+    fetcher_thread.start()
+    for w in worker_threads:
+        w.start()
 
-    t1.join()
-    t2.join()
+    fetcher_thread.join()
+    for w in worker_threads:
+        w.join()

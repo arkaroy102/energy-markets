@@ -1,7 +1,10 @@
+import logging
 import requests
 import threading
 import time
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 USERNAME = "arka.roy102@gmail.com"
 PASSWORD = "fac@ajk!wnv_heu9NAU"
@@ -33,7 +36,7 @@ class TokenManager():
             return self._access_token
 
     def _fetch_token(self):
-        print("Fetching token")
+        logger.debug("Fetching token")
         auth_resp = requests.post(self.auth_url)
         auth_resp.raise_for_status()
 
@@ -70,7 +73,7 @@ class ErcotClient:
             "size": batch_size,
             "page": page,
         }
-        print(params)
+        logger.debug(f"Fetching page with params: {params}")
 
         headers = {
             "Authorization": f"Bearer {self._token_manager.get_token()}",
@@ -87,9 +90,9 @@ class ErcotClient:
                         sleep_s = float(retry_after)
                     else:
                         sleep_s = backoff
-                        print(f"Rate limited, sleeping for {sleep_s} seconds")
+                        logger.warning(f"Rate limited, sleeping for {sleep_s} seconds")
                 elif resp.status_code == 401:
-                    print(f"Token expired, refreshing")
+                    logger.warning("Token expired, refreshing")
                     self._token_manager.force_refresh()
                     headers["Authorization"] = f"Bearer {self._token_manager.get_token()}"
                     continue
@@ -101,7 +104,7 @@ class ErcotClient:
             except (requests.exceptions.SSLError,
                     requests.exceptions.ConnectionError,
                     requests.exceptions.Timeout) as e:
-                print(f"Request error {e}, closing session and retrying")
+                logger.warning(f"Request error {e}, closing session and retrying")
                 self._session.close()
                 self._session = requests.Session()
                 continue
