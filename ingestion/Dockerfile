@@ -5,4 +5,4 @@ RUN pip install -r requirements.txt
 
 COPY . .
 
-CMD ["python", "ercot_api.py"]
+CMD ["python", "ercot_ingestion.py"]
