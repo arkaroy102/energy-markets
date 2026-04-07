@@ -14,6 +14,7 @@ from ercot_client import put_locations, get_locations, put_prices, get_latest_ti
 ct = ZoneInfo("America/Chicago")
 poll_period = 2 # seconds
 num_workers = 4
+metrics_log_interval = 10
 
 location_id_dict = {}
 location_dict_lock = threading.Lock()
@@ -141,9 +142,10 @@ def writer():
             metrics["ercot_api"]["total"] += curr_ercot_api_time
             metrics["ercot_api"]["last"] = curr_ercot_api_time
 
-            for key in metrics:
-                avg = metrics[key]["total"] / metrics[key]["count"]
-                logger.info(f"metrics [{key}] avg={avg:.4f}s last={metrics[key]['last']:.4f}s count={metrics[key]['count']}")
+            if metrics["write_price"]["count"] % metrics_log_interval == 0:
+                for key in metrics:
+                    avg = metrics[key]["total"] / metrics[key]["count"]
+                    logger.info(f"metrics [{key}] avg={avg:.4f}s last={metrics[key]['last']:.4f}s count={metrics[key]['count']}")
 
 
 if __name__ == '__main__':
