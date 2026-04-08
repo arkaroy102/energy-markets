@@ -90,7 +90,7 @@ def test_read_location_by_node_name(client):
     r = client.get("/location", params={"grid": "ERCOT", "node_name": "HB_NORTH"})
     assert r.status_code == 200
     body = r.json()
-    assert body["id"] == expected_id
+    assert body["node_id"] == expected_id
     assert body["node_name"] == "HB_NORTH"
     assert body["grid"] == "ERCOT"
 

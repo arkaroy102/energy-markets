@@ -43,7 +43,17 @@ class LocationCreate(BaseModel):
     node_name: str
     node_type: NodeTypeEnum
 
-@app.post("/locations")
+class LocationResponse(BaseModel):
+    node_id: int
+    grid: GridEnum
+    node_name: str
+    node_type: NodeTypeEnum
+
+class LocationSummary(BaseModel):
+    node_id: int
+    node_name: str
+
+@app.post("/locations", response_model=LocationResponse | None)
 def create_location(location: LocationCreate, db: Session = Depends(get_db)):
     rows = insert_locations(db, [location])
     if not rows:
@@ -55,7 +65,7 @@ def create_location(location: LocationCreate, db: Session = Depends(get_db)):
         "node_type": rows[0].node_type,
     }
 
-@app.post("/locations/batch")
+@app.post("/locations/batch", response_model=list[LocationResponse])
 def create_locations(
     locations: list[LocationCreate],
     db: Session = Depends(get_db),
@@ -68,7 +78,7 @@ def create_locations(
         "node_type": row.node_type,
     } for row in rows]
 
-@app.get("/locations")
+@app.get("/locations", response_model=list[LocationSummary])
 def get_locations(
     grid: GridEnum,
     db: Session = Depends(get_db),
@@ -106,7 +116,7 @@ def insert_locations(db: Session, locations: list[LocationCreate]):
     db.commit()
     return written_rows
 
-@app.get("/location")
+@app.get("/location", response_model=LocationResponse)
 def get_location_by_node_name(
     grid: GridEnum,
     node_name: str,
@@ -123,17 +133,32 @@ def get_location_by_node_name(
     if row is None:
         raise HTTPException(status_code=404, detail=f"Node name {node_name} not found")
 
-    response = {
-        "id": row.node_id,
+    return {
+        "node_id": row.node_id,
         "grid": row.grid,
         "node_name": row.node_name,
+        "node_type": row.node_type,
     }
-    return response
 
 class PriceCreate(BaseModel):
     node_id: int
     timestamp_utc: datetime
     lmp: float
+
+class PriceResponse(BaseModel):
+    node_id: int
+    timestamp_utc: datetime
+    lmp: float
+
+class ZonePriceResponse(BaseModel):
+    settlement_load_zone: str
+    avg_lmp: float | None
+    min_timestamp_utc: datetime
+    max_timestamp_utc: datetime
+    num_nodes: int
+
+class LatestTimestampResponse(BaseModel):
+    timestamp_utc: datetime | None
 
 def insert_prices(db: Session, prices: list[PriceCreate]):
     stmt = insert(NodePrice).values([
@@ -187,7 +212,7 @@ def delete_all_locations(db: Session = Depends(get_db)):
     db.commit()
     return {}
 
-@app.get("/prices/{node_id}")
+@app.get("/prices/{node_id}", response_model=list[PriceResponse])
 def get_prices(
     node_id: int,
     limit: int = Query(1, ge=1),  # default = 1
@@ -209,7 +234,7 @@ def get_prices(
         for row in rows
     ]
 
-@app.get("/latest-prices")
+@app.get("/latest-prices", response_model=list[PriceResponse])
 def get_latest_prices(db: Session = Depends(get_db)):
     rows = (
         db.query(NodePrice)
@@ -227,7 +252,7 @@ def get_latest_prices(db: Session = Depends(get_db)):
         for row in rows
     ]
 
-@app.get("/latest-price-timestamp")
+@app.get("/latest-price-timestamp", response_model=LatestTimestampResponse)
 def get_latest_price_timestamp(db: Session = Depends(get_db)):
     latest_timestamp = db.query(func.max(NodePrice.timestamp_utc)).scalar()
     return { "timestamp_utc": latest_timestamp }
@@ -236,7 +261,7 @@ def get_latest_price_timestamp(db: Session = Depends(get_db)):
 def health():
     return {"status": "ok"}
 
-@app.get("/api/latest-zone-prices")
+@app.get("/api/latest-zone-prices", response_model=list[ZonePriceResponse])
 def get_latest_zone_prices(request: Request, db: Session = Depends(get_db)):
     try:
         cached = redis_client.get(CACHE_KEY_LATEST_ZONE_PRICES)
