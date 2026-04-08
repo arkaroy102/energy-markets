@@ -1,4 +1,5 @@
 import logging
+import os
 import requests
 import threading
 import time
@@ -6,9 +7,9 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-USERNAME = "arka.roy102@gmail.com"
-PASSWORD = "fac@ajk!wnv_heu9NAU"
-SUBSCRIPTION_KEY = "c23173b7e2094b1fab1fff5cc0bbd25f"
+USERNAME = os.environ["ERCOT_USERNAME"]
+PASSWORD = os.environ["ERCOT_PASSWORD"]
+SUBSCRIPTION_KEY = os.environ["ERCOT_SUBSCRIPTION_KEY"]
 
 SCOPE = "openid+fec253ea-0d06-4272-a5e6-b478baeecd70+offline_access"
 CLIENT_ID = "fec253ea-0d06-4272-a5e6-b478baeecd70"
