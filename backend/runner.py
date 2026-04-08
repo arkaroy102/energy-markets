@@ -1,6 +1,5 @@
 from datetime import datetime
 import time, json
-from datetime import timezone
 
 from fastapi import Request
 from fastapi import FastAPI, Depends, Query
@@ -43,6 +42,8 @@ def create_location(grid: GridEnum, node_name: str, node_type: NodeTypeEnum, db:
         node_type=node_type,
     )
     rows = insert_locations(db, [location])
+    if not rows:
+        return {}
     return {
         "node_id": rows[0].node_id,
         "grid": rows[0].grid,
@@ -149,7 +150,7 @@ def insert_prices(db: Session, prices: list[PriceCreate]):
         db.commit()
     except Exception as exc:
         db.rollback()
-        raise HTTPException(status_Code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail=str(exc))
 
     try:
         redis_client.delete(CACHE_KEY_LATEST_ZONE_PRICES)
@@ -187,7 +188,14 @@ def get_prices(
         .limit(limit)
         .all()
     )
-    return rows
+    return [
+        {
+            "node_id": row.node_id,
+            "timestamp_utc": row.timestamp_utc,
+            "lmp": row.lmp,
+        }
+        for row in rows
+    ]
 
 @app.get("/latest-prices")
 def get_latest_prices(db: Session = Depends(get_db)):
@@ -208,7 +216,7 @@ def get_latest_prices(db: Session = Depends(get_db)):
     ]
 
 @app.get("/latest-price-timestamp")
-def get_latest_prices(db: Session = Depends(get_db)):
+def get_latest_price_timestamp(db: Session = Depends(get_db)):
     latest_timestamp = db.query(func.max(NodePrice.timestamp_utc)).scalar()
     return { "timestamp_utc": latest_timestamp }
 
@@ -220,14 +228,14 @@ def health():
 def get_latest_zone_prices(request: Request, db: Session = Depends(get_db)):
     try:
         cached = redis_client.get(CACHE_KEY_LATEST_ZONE_PRICES)
-        request.state.cache_status = "hit"
         if cached:
+            request.state.cache_status = "hit"
             return json.loads(cached)
+        else:
+            request.state.cache_status = "miss"
     except Exception as exc:
         request.state.cache_status = "error"
         print(f"Redis exception: {exc}")
-
-    request.state.cache_status = "miss"
 
     latest_per_node = (
         db.query(
@@ -264,8 +272,8 @@ def get_latest_zone_prices(request: Request, db: Session = Depends(get_db)):
         {
             "settlement_load_zone": row.settlement_load_zone,
             "avg_lmp": float(row.avg_lmp) if row.avg_lmp is not None else None,
-            "min_timestamp_utc": row.min_timestamp_utc.replace(tzinfo=timezone.utc).isoformat(),
-            "max_timestamp_utc": row.max_timestamp_utc.replace(tzinfo=timezone.utc).isoformat(),
+            "min_timestamp_utc": row.min_timestamp_utc.isoformat(),
+            "max_timestamp_utc": row.max_timestamp_utc.isoformat(),
             "num_nodes": row.num_nodes,
         }
         for row in rows
