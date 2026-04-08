@@ -24,7 +24,7 @@ def clear_state(client: TestClient):
 def test_create_single_location(client):
     clear_state(client)
 
-    r = client.post("/locations", params={
+    r = client.post("/locations", json={
         "grid": "ERCOT",
         "node_name": "HB_NORTH",
         "node_type": "ELECTRICAL_BUS",
@@ -160,7 +160,7 @@ def test_create_single_price(client):
     clear_state(client)
 
     node_id = _create_node(client)
-    r = client.post("/prices", params={
+    r = client.post("/prices", json={
         "node_id": node_id,
         "timestamp_utc": TS1,
         "lmp": 42.5,

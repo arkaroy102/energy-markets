@@ -35,12 +35,7 @@ class LocationCreate(BaseModel):
     node_type: NodeTypeEnum
 
 @app.post("/locations")
-def create_location(grid: GridEnum, node_name: str, node_type: NodeTypeEnum, db: Session = Depends(get_db)):
-    location = LocationCreate(
-        grid=grid,
-        node_name=node_name,
-        node_type=node_type,
-    )
+def create_location(location: LocationCreate, db: Session = Depends(get_db)):
     rows = insert_locations(db, [location])
     if not rows:
         return {}
@@ -158,12 +153,7 @@ def insert_prices(db: Session, prices: list[PriceCreate]):
         print(f"Redis delete error: {exc}")
 
 @app.post("/prices")
-def create_price(node_id: int, timestamp_utc: datetime, lmp: float, db: Session = Depends(get_db)):
-    price = PriceCreate(
-        node_id=node_id,
-        timestamp_utc=timestamp_utc,
-        lmp=lmp,
-    )
+def create_price(price: PriceCreate, db: Session = Depends(get_db)):
     insert_prices(db, [price])
     return {}
 
