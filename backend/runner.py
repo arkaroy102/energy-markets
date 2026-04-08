@@ -97,6 +97,14 @@ def get_locations(
         for row in rows
     ]
 
+# --- Write helpers ---
+# Writes use SQLAlchemy Core (insert().values()) rather than the ORM for two reasons:
+# 1. Bulk inserts: Core produces a single SQL statement regardless of batch size;
+#    ORM db.add() in a loop issues N round trips.
+# 2. Upsert syntax: on_conflict_do_nothing with returning() is only available via Core.
+# Reads use the ORM (db.query()) where the result sets are small and the filter
+# syntax is cleaner. This is an intentional split, not an inconsistency.
+
 def insert_locations(db: Session, locations: list[LocationCreate]):
     stmt = insert(Node).values([
         {
