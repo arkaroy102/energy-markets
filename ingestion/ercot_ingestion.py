@@ -119,7 +119,7 @@ def writer():
                     location_id_dict[row['node_name']] = row['node_id']
                 except:
                     assert False, f"Could not add row: {row}"
-            logger.debug(f"Node map size: {len(location_id_dict)}")
+            logger.info(f"Node map size: {len(location_id_dict)}")
             payload = build_price_payload(data['data'], location_id_dict, ct)
 
         t0_2 = time.perf_counter()
@@ -148,11 +148,20 @@ def writer():
                     logger.info(f"metrics [{key}] avg={avg:.4f}s last={metrics[key]['last']:.4f}s count={metrics[key]['count']}")
 
 
+def _thread_excepthook(args):
+    logger.critical(
+        f"Unhandled exception in thread {args.thread.name}, exiting",
+        exc_info=(args.exc_type, args.exc_value, args.exc_traceback),
+    )
+    os._exit(1)
+
+
 if __name__ == '__main__':
     logging.basicConfig(
         level=os.getenv("LOG_LEVEL", "INFO").upper(),
         format="%(asctime)s %(threadName)-12s %(levelname)-8s %(message)s",
     )
+    threading.excepthook = _thread_excepthook
 
     for row in get_locations():
         try:

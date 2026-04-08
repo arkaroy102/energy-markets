@@ -36,7 +36,7 @@ class TokenManager():
             return self._access_token
 
     def _fetch_token(self):
-        logger.debug("Fetching token")
+        logger.info("Fetching token")
         auth_resp = requests.post(self.auth_url)
         auth_resp.raise_for_status()
 
@@ -73,7 +73,7 @@ class ErcotClient:
             "size": batch_size,
             "page": page,
         }
-        logger.debug(f"Fetching page with params: {params}")
+        logger.info(f"Fetching page with params: {params}")
 
         headers = {
             "Authorization": f"Bearer {self._token_manager.get_token()}",
@@ -103,7 +103,8 @@ class ErcotClient:
                     raise RuntimeError(f"Rate limited after {max_retries} retries: {resp.text}")
             except (requests.exceptions.SSLError,
                     requests.exceptions.ConnectionError,
-                    requests.exceptions.Timeout) as e:
+                    requests.exceptions.Timeout,
+                    requests.exceptions.ChunkedEncodingError) as e:
                 logger.warning(f"Request error {e}, closing session and retrying")
                 self._session.close()
                 self._session = requests.Session()
