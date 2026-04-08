@@ -179,7 +179,7 @@ def insert_prices(db: Session, prices: list[PriceCreate]):
         db.commit()
     except Exception as exc:
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise
 
     try:
         redis_client.delete(CACHE_KEY_LATEST_ZONE_PRICES)
@@ -188,7 +188,10 @@ def insert_prices(db: Session, prices: list[PriceCreate]):
 
 @app.post("/prices")
 def create_price(price: PriceCreate, db: Session = Depends(get_db)):
-    insert_prices(db, [price])
+    try:
+        insert_prices(db, [price])
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
     return {}
 
 @app.post("/prices/batch")
@@ -196,7 +199,10 @@ def create_prices(
     prices: list[PriceCreate],
     db: Session = Depends(get_db),
 ):
-    insert_prices(db, prices)
+    try:
+        insert_prices(db, prices)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
     return {}
 
 @app.delete("/prices")
