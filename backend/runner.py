@@ -1,4 +1,6 @@
 from datetime import datetime, timezone
+import logging
+import os
 import time, json
 
 from fastapi import Request
@@ -15,8 +17,15 @@ from models import Base, Node, NodePrice, GridEnum, NodeTypeEnum
 
 from redis_client import redis_client
 
+logger = logging.getLogger(__name__)
+
 CACHE_KEY_LATEST_ZONE_PRICES = "latest_zone_prices"
 CACHE_TTL_SECONDS_LATEST_ZONE_PRICES = 300 # 5 minutes
+
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s %(levelname)-8s %(message)s",
+)
 
 app = FastAPI()
 
@@ -150,7 +159,7 @@ def insert_prices(db: Session, prices: list[PriceCreate]):
     try:
         redis_client.delete(CACHE_KEY_LATEST_ZONE_PRICES)
     except Exception as exc:
-        print(f"Redis delete error: {exc}")
+        logger.warning(f"Redis delete error: {exc}")
 
 @app.post("/prices")
 def create_price(price: PriceCreate, db: Session = Depends(get_db)):
@@ -238,7 +247,7 @@ def get_latest_zone_prices(request: Request, db: Session = Depends(get_db)):
             request.state.cache_status = "miss"
     except Exception as exc:
         request.state.cache_status = "error"
-        print(f"Redis exception: {exc}")
+        logger.warning(f"Redis exception: {exc}")
 
     latest_per_node = (
         db.query(
@@ -287,7 +296,7 @@ def get_latest_zone_prices(request: Request, db: Session = Depends(get_db)):
                            CACHE_TTL_SECONDS_LATEST_ZONE_PRICES,
                            json.dumps(result))
     except Exception as exc:
-        print(f"Redis write failed {exc}")
+        logger.warning(f"Redis write failed {exc}")
 
     return result
 
@@ -312,8 +321,8 @@ async def timing_middleware(request: Request, call_next):
     avg = metrics[key]["total"] / metrics[key]["count"]
 
 
-    print(f"{request.method} {request.url.path} took {duration:.4f}s")
-    print(f"{key} avg={avg:.4f}s last={duration:.4f}s callcount={metrics[key]["count"]}")
+    logger.info(f"{request.method} {request.url.path} took {duration:.4f}s")
+    logger.info(f"{key} avg={avg:.4f}s last={duration:.4f}s callcount={metrics[key]["count"]}")
 
     cache_status = getattr(request.state, "cache_status", None)
     if cache_status:
@@ -327,7 +336,7 @@ async def timing_middleware(request: Request, call_next):
         hit_rate = metrics[key]["cache_hit"]/metrics[key]["count"]
         error_rate = metrics[key]["cache_error"]/metrics[key]["count"]
 
-        print(f"Cache hit rate: {hit_rate:.4f}, error_rate: {error_rate:.4f}")
+        logger.info(f"Cache hit rate: {hit_rate:.4f}, error_rate: {error_rate:.4f}")
 
     response.headers["X-Process-Time"] = str(duration)
     return response
