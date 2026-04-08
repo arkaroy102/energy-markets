@@ -175,6 +175,19 @@ def create_prices(
     insert_prices(db, prices)
     return {}
 
+@app.delete("/prices")
+def delete_all_prices(db: Session = Depends(get_db)):
+    db.query(NodePrice).delete()
+    db.commit()
+    return {}
+
+@app.delete("/locations")
+def delete_all_locations(db: Session = Depends(get_db)):
+    db.query(NodePrice).delete()  # prices first: FK constraint
+    db.query(Node).delete()
+    db.commit()
+    return {}
+
 @app.get("/prices/{node_id}")
 def get_prices(
     node_id: int,
