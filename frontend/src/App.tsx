@@ -7,15 +7,15 @@ import type { ZonePrice, NodeLocation, PricePoint } from './types/market'
 
 const GRIDS = ['ERCOT', 'NYISO', 'CAISO']
 
-function todayUTC(): string {
-    return new Date().toISOString().slice(0, 10)
+function todayLocal(): string {
+    // en-CA gives YYYY-MM-DD format in the browser's local timezone
+    return new Date().toLocaleDateString('en-CA')
 }
 
 function formatTime(timestamp: string): string {
     return new Date(timestamp).toLocaleTimeString([], {
         hour: '2-digit',
         minute: '2-digit',
-        timeZone: 'America/New_York',
     })
 }
 
@@ -31,7 +31,7 @@ export default function App() {
     const [selectedGrid, setSelectedGrid] = useState('ERCOT')
     const [locations, setLocations] = useState<NodeLocation[]>([])
     const [selectedNode, setSelectedNode] = useState<string>('')
-    const [selectedDate, setSelectedDate] = useState(todayUTC())
+    const [selectedDate, setSelectedDate] = useState(todayLocal())
 
     // --- Timeseries chart ---
     const [timeseries, setTimeseries] = useState<PricePoint[]>([])
