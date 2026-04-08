@@ -313,3 +313,107 @@ def test_delete_locations_cascades_prices(client):
 
     r = client.get(f"/prices/{node_id}", params={"limit": 10})
     assert r.json() == []
+
+
+# ---------------------------------------------------------------------------
+# Timeseries endpoint
+# ---------------------------------------------------------------------------
+
+# Timestamps spread across two calendar days (UTC)
+TS_DAY1_A = "2024-03-01T00:05:00+00:00"
+TS_DAY1_B = "2024-03-01T00:10:00+00:00"
+TS_DAY1_C = "2024-03-01T00:15:00+00:00"
+TS_DAY2_A = "2024-03-02T00:05:00+00:00"
+
+
+def test_timeseries_returns_correct_day(client):
+    clear_state(client)
+
+    node_id = _create_node(client)
+    client.post("/prices/batch", json=[
+        {"node_id": node_id, "timestamp_utc": TS_DAY1_A, "lmp": 10.0},
+        {"node_id": node_id, "timestamp_utc": TS_DAY1_B, "lmp": 20.0},
+        {"node_id": node_id, "timestamp_utc": TS_DAY1_C, "lmp": 30.0},
+        {"node_id": node_id, "timestamp_utc": TS_DAY2_A, "lmp": 99.0},
+    ])
+
+    r = client.get("/prices/timeseries", params={
+        "grid": "ERCOT", "node_name": "HB_NORTH", "date": "2024-03-01"
+    })
+    assert r.status_code == 200
+    rows = r.json()
+    assert len(rows) == 3
+    lmps = [row["lmp"] for row in rows]
+    assert lmps == [10.0, 20.0, 30.0]
+
+    clear_state(client)
+
+
+def test_timeseries_ordered_ascending(client):
+    clear_state(client)
+
+    node_id = _create_node(client)
+    client.post("/prices/batch", json=[
+        {"node_id": node_id, "timestamp_utc": TS_DAY1_C, "lmp": 30.0},
+        {"node_id": node_id, "timestamp_utc": TS_DAY1_A, "lmp": 10.0},
+        {"node_id": node_id, "timestamp_utc": TS_DAY1_B, "lmp": 20.0},
+    ])
+
+    r = client.get("/prices/timeseries", params={
+        "grid": "ERCOT", "node_name": "HB_NORTH", "date": "2024-03-01"
+    })
+    rows = r.json()
+    timestamps = [row["timestamp_utc"] for row in rows]
+    assert timestamps == sorted(timestamps)
+
+    clear_state(client)
+
+
+def test_timeseries_empty_for_date_with_no_data(client):
+    clear_state(client)
+
+    node_id = _create_node(client)
+    client.post("/prices/batch", json=[
+        {"node_id": node_id, "timestamp_utc": TS_DAY1_A, "lmp": 10.0},
+    ])
+
+    r = client.get("/prices/timeseries", params={
+        "grid": "ERCOT", "node_name": "HB_NORTH", "date": "2024-03-02"
+    })
+    assert r.status_code == 200
+    assert r.json() == []
+
+    clear_state(client)
+
+
+def test_timeseries_node_not_found(client):
+    clear_state(client)
+
+    r = client.get("/prices/timeseries", params={
+        "grid": "ERCOT", "node_name": "DOES_NOT_EXIST", "date": "2024-03-01"
+    })
+    assert r.status_code == 404
+
+    clear_state(client)
+
+
+def test_timeseries_data_accuracy(client):
+    """LMP and timestamp round-trip exactly through the timeseries endpoint."""
+    clear_state(client)
+
+    node_id = _create_node(client)
+    client.post("/prices/batch", json=[
+        {"node_id": node_id, "timestamp_utc": TS_DAY1_A, "lmp": 47.123},
+    ])
+
+    r = client.get("/prices/timeseries", params={
+        "grid": "ERCOT", "node_name": "HB_NORTH", "date": "2024-03-01"
+    })
+    row = r.json()[0]
+    assert abs(row["lmp"] - 47.123) < 1e-6
+
+    stored_ts = datetime.fromisoformat(row["timestamp_utc"])
+    original_ts = datetime.fromisoformat(TS_DAY1_A)
+    assert stored_ts == original_ts
+
+    clear_state(client)

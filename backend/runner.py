@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date, timedelta
 import logging
 import os
 import time, json
@@ -158,6 +158,10 @@ class PriceResponse(BaseModel):
     timestamp_utc: datetime
     lmp: float
 
+class TimeseriesPoint(BaseModel):
+    timestamp_utc: datetime
+    lmp: float
+
 class ZonePriceResponse(BaseModel):
     settlement_load_zone: str
     avg_lmp: float | None
@@ -225,6 +229,37 @@ def delete_all_locations(db: Session = Depends(get_db)):
     db.query(Node).delete()
     db.commit()
     return {}
+
+@app.get("/prices/timeseries", response_model=list[TimeseriesPoint])
+def get_price_timeseries(
+    grid: GridEnum,
+    node_name: str,
+    date: date = Query(...),
+    db: Session = Depends(get_db),
+):
+    node = (
+        db.query(Node)
+        .filter(Node.grid == grid, Node.node_name == node_name)
+        .first()
+    )
+    if node is None:
+        raise HTTPException(status_code=404, detail=f"Node {node_name} not found in grid {grid}")
+
+    day_start = datetime.combine(date, datetime.min.time()).replace(tzinfo=timezone.utc)
+    day_end = day_start + timedelta(days=1)
+
+    rows = (
+        db.query(NodePrice)
+        .filter(
+            NodePrice.node_id == node.node_id,
+            NodePrice.timestamp_utc >= day_start,
+            NodePrice.timestamp_utc < day_end,
+        )
+        .order_by(NodePrice.timestamp_utc.asc())
+        .all()
+    )
+
+    return [{"timestamp_utc": row.timestamp_utc.replace(tzinfo=timezone.utc), "lmp": row.lmp} for row in rows]
 
 @app.get("/prices/{node_id}", response_model=list[PriceResponse])
 def get_prices(
