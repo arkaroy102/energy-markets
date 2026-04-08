@@ -48,12 +48,11 @@ class NodePrice(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     node_id: Mapped[int] = mapped_column(ForeignKey("node_table.node_id"))
 
-    timestamp_utc: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    timestamp_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     lmp: Mapped[float] = mapped_column(Float, nullable=False)
 
     location: Mapped["Node"] = relationship(back_populates="prices")
 
     __table_args__ = (
         UniqueConstraint("node_id", "timestamp_utc", name="uq_price"),
-        Index("ix_prices_location_time", "node_id", "timestamp_utc"),
     )

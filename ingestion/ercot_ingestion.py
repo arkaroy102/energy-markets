@@ -55,7 +55,7 @@ def build_price_payload(rows: list, location_id_dict: dict, tz) -> list:
     return [
         {
             "node_id": location_id_dict[row[2]],
-            "timestamp_utc": datetime.fromisoformat(row[0]).replace(tzinfo=tz).astimezone(timezone.utc).isoformat(),
+            "timestamp_utc": datetime.fromisoformat(row[0]).replace(tzinfo=tz).isoformat(),
             "lmp": row[3],
         }
         for row in rows

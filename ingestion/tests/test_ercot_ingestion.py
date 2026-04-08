@@ -43,8 +43,8 @@ def test_find_new_buses_all_known():
     assert new_buses == set()
 
 
-def test_build_price_payload_converts_ct_to_utc():
-    # April 4 2026 is CDT (UTC-5), so 14:10:20 CDT = 19:10:20 UTC
+def test_build_price_payload_attaches_ct_timezone():
+    # April 4 2026 is CDT (UTC-5), naive ERCOT timestamp gets -05:00 offset attached
     rows = [
         ['2026-04-04T14:10:20', None, 'BUS_A', 14.8],
     ]
@@ -53,7 +53,7 @@ def test_build_price_payload_converts_ct_to_utc():
     payload = build_price_payload(rows, location_id_dict, ct)
 
     assert len(payload) == 1
-    assert payload[0]['timestamp_utc'] == '2026-04-04T19:10:20+00:00'
+    assert payload[0]['timestamp_utc'] == '2026-04-04T14:10:20-05:00'
 
 
 def test_build_price_payload_maps_node_id_and_lmp():
@@ -70,8 +70,8 @@ def test_build_price_payload_maps_node_id_and_lmp():
     assert by_node[2]['lmp'] == pytest.approx(-27.01)
 
 
-def test_build_price_payload_winter_timestamp_converts_cst_to_utc():
-    # January 4 2026 is CST (UTC-6), so 14:10:20 CST = 20:10:20 UTC
+def test_build_price_payload_winter_timestamp_attaches_cst_timezone():
+    # January 4 2026 is CST (UTC-6), naive ERCOT timestamp gets -06:00 offset attached
     rows = [
         ['2026-01-04T14:10:20', None, 'BUS_A', 10.0],
     ]
@@ -79,7 +79,7 @@ def test_build_price_payload_winter_timestamp_converts_cst_to_utc():
 
     payload = build_price_payload(rows, location_id_dict, ct)
 
-    assert payload[0]['timestamp_utc'] == '2026-01-04T20:10:20+00:00'
+    assert payload[0]['timestamp_utc'] == '2026-01-04T14:10:20-06:00'
 
 
 # --- parse_initial_maxtime ---
