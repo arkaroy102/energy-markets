@@ -13,7 +13,7 @@ from ercot_client import put_locations, get_locations, put_prices, get_latest_ti
 
 ct = ZoneInfo("America/Chicago")
 poll_period = 2 # seconds
-num_workers = 4
+num_workers = 4  # 2 for steady state (2 pages per SCED interval), 4 for catch-up mode
 metrics_log_interval = 10
 
 location_id_dict = {}
@@ -117,10 +117,12 @@ def writer():
             for row in put_locations(list(new_busses)):
                 try:
                     location_id_dict[row['node_name']] = row['node_id']
-                except:
-                    assert False, f"Could not add row: {row}"
+                except Exception as e:
+                    raise RuntimeError(f"Could not add row: {row}") from e
             logger.info(f"Node map size: {len(location_id_dict)}")
-            payload = build_price_payload(data['data'], location_id_dict, ct)
+            location_snapshot = dict(location_id_dict)  # snapshot under lock before releasing
+
+        payload = build_price_payload(data['data'], location_snapshot, ct)
 
         t0_2 = time.perf_counter()
         put_prices(payload)
