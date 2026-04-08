@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 import time, json
 
 from fastapi import Request
@@ -275,8 +275,8 @@ def get_latest_zone_prices(request: Request, db: Session = Depends(get_db)):
         {
             "settlement_load_zone": row.settlement_load_zone,
             "avg_lmp": float(row.avg_lmp) if row.avg_lmp is not None else None,
-            "min_timestamp_utc": row.min_timestamp_utc.isoformat(),
-            "max_timestamp_utc": row.max_timestamp_utc.isoformat(),
+            "min_timestamp_utc": row.min_timestamp_utc.replace(tzinfo=timezone.utc).isoformat(),
+            "max_timestamp_utc": row.max_timestamp_utc.replace(tzinfo=timezone.utc).isoformat(),
             "num_nodes": row.num_nodes,
         }
         for row in rows
