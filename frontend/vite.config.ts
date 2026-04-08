@@ -14,6 +14,14 @@ export default defineConfig(({ mode }) => {
                     target: env.VITE_BACKEND_URL || 'http://localhost:8000',
                     changeOrigin: true,
                 },
+                '/locations': {
+                    target: env.VITE_BACKEND_URL || 'http://localhost:8000',
+                    changeOrigin: true,
+                },
+                '/prices': {
+                    target: env.VITE_BACKEND_URL || 'http://localhost:8000',
+                    changeOrigin: true,
+                },
             },
         },
         watch: {
