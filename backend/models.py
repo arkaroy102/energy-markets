@@ -20,6 +20,7 @@ class GridEnum(str, Enum):
 
 class NodeTypeEnum(str, Enum):
     ELECTRICAL_BUS = "ELECTRICAL_BUS"
+    GENERATOR = "GENERATOR"
 
 class Base(DeclarativeBase):
     pass
@@ -32,9 +33,12 @@ class Node(Base):
     node_name: Mapped[str] = mapped_column(String, nullable=False)
     node_type:  Mapped[NodeTypeEnum] = mapped_column(SQLEnum(NodeTypeEnum, name="node_type_enum"), nullable=False)
 
+    external_id: Mapped[str] = mapped_column(String, nullable=True)
     substation : Mapped[str] = mapped_column(String, nullable=True)
     voltage_level : Mapped[float] = mapped_column(Float, nullable=True)
     settlement_load_zone : Mapped[str] = mapped_column(String, nullable=True)
+    latitude: Mapped[float] = mapped_column(Float, nullable=True)
+    longitude: Mapped[float] = mapped_column(Float, nullable=True)
 
     prices: Mapped[List["NodePrice"]] = relationship(back_populates="location")
 

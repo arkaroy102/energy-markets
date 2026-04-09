@@ -1,7 +1,7 @@
 import type { ZonePrice, NodeLocation, PricePoint } from '../types/market'
 
-export async function fetchLatestZonePrices(): Promise<ZonePrice[]> {
-    const response = await fetch('/api/prices/zone-summary')
+export async function fetchLatestZonePrices(grid: string): Promise<ZonePrice[]> {
+    const response = await fetch(`/api/prices/zone-summary?grid=${encodeURIComponent(grid)}`)
 
     if (!response.ok) {
         throw new Error(`Failed to fetch zone prices: ${response.status}`)

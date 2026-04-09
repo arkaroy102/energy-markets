@@ -18,6 +18,20 @@ class GridClient(ABC):
         ...
 
     @abstractmethod
+    def node_type(self) -> str:
+        """Return the node type string for this grid: ELECTRICAL_BUS, GENERATOR, etc."""
+        ...
+
+    def initial_locations(self) -> list[dict]:
+        """
+        Return location payloads to upsert at startup.
+
+        Override for grids with a known node list (e.g. NYISO generator CSV).
+        Default is empty — buses are discovered lazily during ingestion (e.g. ERCOT).
+        """
+        return []
+
+    @abstractmethod
     def iter_pages(self, start: datetime, end: datetime) -> Iterator[list[PriceRecord]]:
         """
         Yield pages of normalized price records for the given time window.

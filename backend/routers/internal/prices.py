@@ -6,18 +6,18 @@ from sqlalchemy import func
 from db import get_db
 from models import GridEnum, Node, NodePrice
 from schemas import PriceCreate, PriceResponse, LatestTimestampResponse
-from redis_client import redis_client
+from redis_client import redis_client, zone_price_cache_key
 
 import logging
 logger = logging.getLogger(__name__)
 
-CACHE_KEY_LATEST_ZONE_PRICES = "latest_zone_prices"
+_MAX_BATCH_SIZE = 10_000
 
 router = APIRouter(prefix="/prices", tags=["internal-prices"])
 
 # --- Write helper ---
 # Uses SQLAlchemy Core for bulk insert — see routers/internal/__init__.py for rationale.
-def insert_prices(db: Session, prices: list[PriceCreate]):
+def insert_prices(db: Session, prices: list[PriceCreate], grid: GridEnum):
     stmt = insert(NodePrice).values([
         {"node_id": p.node_id, "timestamp_utc": p.timestamp_utc, "lmp": p.lmp}
         for p in prices
@@ -27,7 +27,7 @@ def insert_prices(db: Session, prices: list[PriceCreate]):
     db.commit()
 
     try:
-        redis_client.delete(CACHE_KEY_LATEST_ZONE_PRICES)
+        redis_client.delete(zone_price_cache_key(grid.value))
     except Exception as exc:
         logger.warning(f"Redis cache invalidation failed: {exc}")
 
@@ -65,17 +65,19 @@ def get_prices(node_id: int, limit: int = Query(1, ge=1), db: Session = Depends(
     return [{"node_id": row.node_id, "timestamp_utc": row.timestamp_utc, "lmp": row.lmp} for row in rows]
 
 @router.post("")
-def create_price(price: PriceCreate, db: Session = Depends(get_db)):
+def create_price(price: PriceCreate, grid: GridEnum = Query(...), db: Session = Depends(get_db)):
     try:
-        insert_prices(db, [price])
+        insert_prices(db, [price], grid)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
     return {}
 
 @router.post("/batch")
-def create_prices(prices: list[PriceCreate], db: Session = Depends(get_db)):
+def create_prices(prices: list[PriceCreate], grid: GridEnum = Query(...), db: Session = Depends(get_db)):
+    if len(prices) > _MAX_BATCH_SIZE:
+        raise HTTPException(status_code=422, detail=f"Batch size {len(prices)} exceeds maximum {_MAX_BATCH_SIZE}")
     try:
-        insert_prices(db, prices)
+        insert_prices(db, prices, grid)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
     return {}

@@ -20,6 +20,10 @@ def clear_state(client: TestClient):
     assert r.status_code == 200
 
 
+def post_prices(client: TestClient, payload: list, grid: str = "ERCOT"):
+    return client.post("/internal/prices/batch", params={"grid": grid}, json=payload)
+
+
 # ---------------------------------------------------------------------------
 # Location CRUD
 # ---------------------------------------------------------------------------
@@ -161,7 +165,7 @@ def test_create_price_batch(client):
         {"node_id": node_id, "timestamp_utc": TS2, "lmp": 20.0},
         {"node_id": node_id, "timestamp_utc": TS3, "lmp": 30.0},
     ]
-    r = client.post("/internal/prices/batch", json=payload)
+    r = post_prices(client, payload)
     assert r.status_code == 200
 
     r = client.get(f"/internal/prices/{node_id}", params={"limit": 10})
@@ -176,7 +180,7 @@ def test_read_prices_ordered_desc(client):
     clear_state(client)
 
     node_id = _create_node(client)
-    client.post("/internal/prices/batch", json=[
+    post_prices(client, [
         {"node_id": node_id, "timestamp_utc": TS1, "lmp": 10.0},
         {"node_id": node_id, "timestamp_utc": TS2, "lmp": 20.0},
         {"node_id": node_id, "timestamp_utc": TS3, "lmp": 30.0},
@@ -194,7 +198,7 @@ def test_read_prices_limit(client):
     clear_state(client)
 
     node_id = _create_node(client)
-    client.post("/internal/prices/batch", json=[
+    post_prices(client, [
         {"node_id": node_id, "timestamp_utc": TS1, "lmp": 10.0},
         {"node_id": node_id, "timestamp_utc": TS2, "lmp": 20.0},
         {"node_id": node_id, "timestamp_utc": TS3, "lmp": 30.0},
@@ -213,7 +217,7 @@ def test_price_data_accuracy(client):
     clear_state(client)
 
     node_id = _create_node(client)
-    client.post("/internal/prices/batch", json=[
+    post_prices(client, [
         {"node_id": node_id, "timestamp_utc": TS1, "lmp": 123.456},
     ])
 
@@ -234,7 +238,7 @@ def test_price_idempotent_insert(client):
     clear_state(client)
 
     node_id = _create_node(client)
-    client.post("/internal/prices/batch", json=[
+    post_prices(client, [
         {"node_id": node_id, "timestamp_utc": TS1, "lmp": 10.0},
         {"node_id": node_id, "timestamp_utc": TS1, "lmp": 99.0},
     ])
@@ -252,7 +256,7 @@ def test_delete_prices_only(client):
     clear_state(client)
 
     node_id = _create_node(client)
-    client.post("/internal/prices/batch", json=[
+    post_prices(client, [
         {"node_id": node_id, "timestamp_utc": TS1, "lmp": 10.0},
     ])
 
@@ -273,7 +277,7 @@ def test_delete_locations_cascades_prices(client):
     clear_state(client)
 
     node_id = _create_node(client)
-    client.post("/internal/prices/batch", json=[
+    post_prices(client, [
         {"node_id": node_id, "timestamp_utc": TS1, "lmp": 10.0},
     ])
 
@@ -305,7 +309,7 @@ def test_latest_timestamp_returns_max_for_grid(client):
     clear_state(client)
 
     node_id = _create_node(client)
-    client.post("/internal/prices/batch", json=[
+    post_prices(client, [
         {"node_id": node_id, "timestamp_utc": TS1, "lmp": 10.0},
         {"node_id": node_id, "timestamp_utc": TS2, "lmp": 20.0},
         {"node_id": node_id, "timestamp_utc": TS3, "lmp": 30.0},
@@ -329,7 +333,7 @@ def test_latest_timestamp_isolates_by_grid(client):
     ]).json()
     nyiso_id = nyiso_rows[0]["node_id"]
 
-    client.post("/internal/prices/batch", json=[
+    post_prices(client, [
         {"node_id": ercot_id, "timestamp_utc": TS1, "lmp": 10.0},
         {"node_id": nyiso_id, "timestamp_utc": TS3, "lmp": 99.0},  # later, different grid
     ])
@@ -361,7 +365,7 @@ def test_timeseries_returns_correct_day(client):
     clear_state(client)
 
     node_id = _create_node(client)
-    client.post("/internal/prices/batch", json=[
+    post_prices(client, [
         {"node_id": node_id, "timestamp_utc": TS_DAY1_A, "lmp": 10.0},
         {"node_id": node_id, "timestamp_utc": TS_DAY1_B, "lmp": 20.0},
         {"node_id": node_id, "timestamp_utc": TS_DAY1_C, "lmp": 30.0},
@@ -383,7 +387,7 @@ def test_timeseries_ordered_ascending(client):
     clear_state(client)
 
     node_id = _create_node(client)
-    client.post("/internal/prices/batch", json=[
+    post_prices(client, [
         {"node_id": node_id, "timestamp_utc": TS_DAY1_C, "lmp": 30.0},
         {"node_id": node_id, "timestamp_utc": TS_DAY1_A, "lmp": 10.0},
         {"node_id": node_id, "timestamp_utc": TS_DAY1_B, "lmp": 20.0},
@@ -402,7 +406,7 @@ def test_timeseries_empty_for_date_with_no_data(client):
     clear_state(client)
 
     node_id = _create_node(client)
-    client.post("/internal/prices/batch", json=[
+    post_prices(client, [
         {"node_id": node_id, "timestamp_utc": TS_DAY1_A, "lmp": 10.0},
     ])
 
@@ -431,7 +435,7 @@ def test_timeseries_data_accuracy(client):
     clear_state(client)
 
     node_id = _create_node(client)
-    client.post("/internal/prices/batch", json=[
+    post_prices(client, [
         {"node_id": node_id, "timestamp_utc": TS_DAY1_A, "lmp": 47.123},
     ])
 

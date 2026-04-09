@@ -25,30 +25,27 @@ def get_latest_timestamp(grid: str):
     return resp_body["timestamp_utc"] if "timestamp_utc" in resp_body else None
 
 
-def put_locations(node_names: list[str], grid: str):
-    if not node_names:
+def put_locations(locations: list[dict]):
+    if not locations:
         return []
-    payload = [
-        {"grid": grid, "node_name": node_name, "node_type": "ELECTRICAL_BUS"}
-        for node_name in node_names
-    ]
     r = requests.post(
         f"{BACKEND_URL}/internal/locations/batch",
-        json=payload,
-        timeout=30,
+        json=locations,
+        timeout=60,
     )
     r.raise_for_status()
     results = r.json()
-    if len(results) < len(payload):
-        print(f"Only inserted {len(results)} instead of {len(payload)}")
+    if len(results) < len(locations):
+        print(f"Only inserted {len(results)} instead of {len(locations)}")
     return results
 
 
-def put_prices(payload: list[dict]):
+def put_prices(payload: list[dict], grid: str):
     if not payload:
         return None
     r = requests.post(
         f"{BACKEND_URL}/internal/prices/batch",
+        params={"grid": grid},
         json=payload,
         timeout=30,
     )

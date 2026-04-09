@@ -7,12 +7,20 @@ class LocationCreate(BaseModel):
     grid: GridEnum
     node_name: str
     node_type: NodeTypeEnum
+    external_id: str | None = None
+    settlement_load_zone: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
 
 class LocationResponse(BaseModel):
     node_id: int
     grid: GridEnum
     node_name: str
     node_type: NodeTypeEnum
+    external_id: str | None = None
+    settlement_load_zone: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
 
 class LocationSummary(BaseModel):
     node_id: int

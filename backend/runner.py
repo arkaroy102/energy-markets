@@ -47,7 +47,7 @@ async def timing_middleware(request: Request, call_next):
 
     key = f"{request.method} {request.url.path}"
     if key not in metrics:
-        metrics[key] = {"count": 0, "total": 0.0, "cache_hit": 0.0, "cache_miss": 0.0, "cache_error": 0.0}
+        metrics[key] = {"count": 0, "total": 0.0}
 
     metrics[key]["count"] += 1
     metrics[key]["total"] += duration
@@ -57,16 +57,15 @@ async def timing_middleware(request: Request, call_next):
 
     cache_status = getattr(request.state, "cache_status", None)
     if cache_status:
-        if cache_status == "hit":
-            metrics[key]["cache_hit"] += 1
-        elif cache_status == "miss":
-            metrics[key]["cache_miss"] += 1
-        elif cache_status == "error":
-            metrics[key]["cache_error"] += 1
-
-        hit_rate = metrics[key]["cache_hit"] / metrics[key]["count"]
-        error_rate = metrics[key]["cache_error"] / metrics[key]["count"]
-        logger.info(f"Cache hit rate: {hit_rate:.4f}, error_rate: {error_rate:.4f}")
+        grid = request.query_params.get("grid", "unknown")
+        cache_key = f"cache:{key}:{grid}"
+        if cache_key not in metrics:
+            metrics[cache_key] = {"hit": 0, "miss": 0, "error": 0}
+        metrics[cache_key][cache_status] += 1
+        total_cache = sum(metrics[cache_key].values())
+        hit_rate = metrics[cache_key]["hit"] / total_cache
+        error_rate = metrics[cache_key]["error"] / total_cache
+        logger.info(f"Cache [{grid}] hit_rate={hit_rate:.4f} error_rate={error_rate:.4f} total={total_cache}")
 
     response.headers["X-Process-Time"] = str(duration)
     return response

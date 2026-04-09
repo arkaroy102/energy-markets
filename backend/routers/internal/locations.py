@@ -13,7 +13,15 @@ router = APIRouter(prefix="/locations", tags=["internal-locations"])
 # See routers/internal/__init__.py for the broader ORM/Core split rationale.
 def insert_locations(db: Session, locations: list[LocationCreate]):
     stmt = insert(Node).values([
-        {"grid": p.grid, "node_name": p.node_name, "node_type": p.node_type}
+        {
+            "grid": p.grid,
+            "node_name": p.node_name,
+            "node_type": p.node_type,
+            "external_id": p.external_id,
+            "settlement_load_zone": p.settlement_load_zone,
+            "latitude": p.latitude,
+            "longitude": p.longitude,
+        }
         for p in locations
     ])
     stmt = stmt.on_conflict_do_nothing(

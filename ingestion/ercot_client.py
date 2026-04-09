@@ -19,6 +19,9 @@ class ERCOTClient(GridClient):
     def grid(self) -> str:
         return "ERCOT"
 
+    def node_type(self) -> str:
+        return "ELECTRICAL_BUS"
+
     def iter_pages(self, start: datetime, end: datetime) -> Iterator[list[PriceRecord]]:
         for data in self._api.iter_pages(start, end):
             meta = data["_meta"]

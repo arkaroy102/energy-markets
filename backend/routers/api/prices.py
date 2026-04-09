@@ -8,12 +8,11 @@ from sqlalchemy import func, and_
 from db import get_db
 from models import Node, NodePrice, GridEnum
 from schemas import ZonePriceResponse, TimeseriesPoint
-from redis_client import redis_client
+from redis_client import redis_client, zone_price_cache_key
 
 import logging
 logger = logging.getLogger(__name__)
 
-CACHE_KEY_LATEST_ZONE_PRICES = "latest_zone_prices"
 CACHE_TTL_SECONDS_LATEST_ZONE_PRICES = 300  # 5 minutes
 
 router = APIRouter(prefix="/prices", tags=["api-prices"])
@@ -51,9 +50,10 @@ def get_price_timeseries(
 
 
 @router.get("/zone-summary", response_model=list[ZonePriceResponse])
-def get_latest_zone_prices(request: Request, db: Session = Depends(get_db)):
+def get_latest_zone_prices(grid: GridEnum, request: Request, db: Session = Depends(get_db)):
+    cache_key = zone_price_cache_key(grid.value)
     try:
-        cached = redis_client.get(CACHE_KEY_LATEST_ZONE_PRICES)
+        cached = redis_client.get(cache_key)
         if cached:
             request.state.cache_status = "hit"
             return json.loads(cached)
@@ -88,7 +88,7 @@ def get_latest_zone_prices(request: Request, db: Session = Depends(get_db)):
             ),
         )
         .join(Node, NodePrice.node_id == Node.node_id)
-        .filter(Node.settlement_load_zone.isnot(None))
+        .filter(Node.grid == grid, Node.settlement_load_zone.isnot(None))
         .group_by(Node.settlement_load_zone)
         .order_by(Node.settlement_load_zone)
         .all()
@@ -107,7 +107,7 @@ def get_latest_zone_prices(request: Request, db: Session = Depends(get_db)):
 
     try:
         redis_client.setex(
-            CACHE_KEY_LATEST_ZONE_PRICES,
+            cache_key,
             CACHE_TTL_SECONDS_LATEST_ZONE_PRICES,
             json.dumps(result),
         )

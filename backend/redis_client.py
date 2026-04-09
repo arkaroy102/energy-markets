@@ -7,3 +7,7 @@ redis_client = redis.Redis.from_url(
     REDIS_URL,
     decode_responses=True
 )
+
+
+def zone_price_cache_key(grid: str) -> str:
+    return f"latest_zone_prices:{grid}"

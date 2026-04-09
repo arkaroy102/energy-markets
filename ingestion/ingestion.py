@@ -105,7 +105,11 @@ def writer(client: GridClient):
             new_buses = find_new_buses(records, location_id_dict)
             for bus in new_buses:
                 logger.info(f"New bus found: {bus}")
-            for row in backend_client.put_locations(list(new_buses), client.grid()):
+            new_location_payloads = [
+                {"grid": client.grid(), "node_name": bus, "node_type": client.node_type()}
+                for bus in new_buses
+            ]
+            for row in backend_client.put_locations(new_location_payloads):
                 try:
                     location_id_dict[row["node_name"]] = row["node_id"]
                 except Exception as e:
@@ -116,7 +120,7 @@ def writer(client: GridClient):
         payload = build_price_payload(records, location_snapshot)
 
         t0_2 = time.perf_counter()
-        backend_client.put_prices(payload)
+        backend_client.put_prices(payload, client.grid())
         t0_3 = time.perf_counter()
         q.task_done()
 
@@ -153,10 +157,10 @@ def _thread_excepthook(args):
 
 if __name__ == "__main__":
     import argparse
-    from ercot_client import ERCOTClient
 
     CLIENTS = {
-        "ERCOT": ERCOTClient,
+        "ERCOT": "ercot_client.ERCOTClient",
+        "NYISO": "nyiso.client.NYISOClient",
     }
 
     parser = argparse.ArgumentParser(description="Grid price ingestion service")
@@ -181,13 +185,22 @@ if __name__ == "__main__":
     )
     threading.excepthook = _thread_excepthook
 
-    client = CLIENTS[args.grid]()
+    module_path, class_name = CLIENTS[args.grid].rsplit(".", 1)
+    import importlib
+    client_class = getattr(importlib.import_module(module_path), class_name)
+    client = client_class()
 
     for row in backend_client.get_locations(client.grid()):
         try:
             location_id_dict[row["node_name"]] = row["node_id"]
         except Exception:
             logger.warning(f"Could not add row: {row}")
+
+    initial = client.initial_locations()
+    if initial:
+        logger.info(f"Seeding {len(initial)} initial locations for {client.grid()}")
+        for row in backend_client.put_locations(initial):
+            location_id_dict[row["node_name"]] = row["node_id"]
 
     fetcher_thread = threading.Thread(
         target=fetcher, args=(client, args.max_lookback), name="fetcher"

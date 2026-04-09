@@ -37,7 +37,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
-  ingestion:
+  ingestion-ercot:
     build:
       context: ./ingestion
     env_file: .env
@@ -48,6 +48,17 @@ services:
         condition: service_healthy
     restart: unless-stopped
     command: ["python", "-u", "ingestion.py", "--grid", "ERCOT"]
+
+  ingestion-nyiso:
+    build:
+      context: ./ingestion
+    environment:
+      BACKEND_URL: "http://backend:8000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    command: ["python", "-u", "ingestion.py", "--grid", "NYISO"]
 
 volumes:
   postgres_data:

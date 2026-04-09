@@ -2,29 +2,28 @@ import { useEffect, useState } from 'react'
 import { fetchLatestZonePrices } from '../api/client'
 import type { ZonePrice } from '../types/market'
 
-export default function ZonePriceTable() {
+interface Props {
+    grid: string
+    title: string
+    onRefresh?: (time: Date) => void
+}
+
+export default function ZonePriceTable({ grid, title, onRefresh }: Props) {
     const [rows, setRows] = useState<ZonePrice[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null)
-    const [now, setNow] = useState(new Date())
-
-    useEffect(() => {
-        const clockId = window.setInterval(() => setNow(new Date()), 1000)
-        return () => window.clearInterval(clockId)
-    }, [])
 
     useEffect(() => {
         let cancelled = false
 
         async function load() {
             try {
-                const data = await fetchLatestZonePrices()
+                const data = await fetchLatestZonePrices(grid)
                 if (!cancelled) {
                     setRows(data)
                     setError(null)
-                    setLastRefreshed(new Date())
                     setLoading(false)
+                    onRefresh?.(new Date())
                 }
             } catch (err) {
                 if (!cancelled) {
@@ -43,16 +42,11 @@ export default function ZonePriceTable() {
 
         loop()
         return () => { cancelled = true }
-    }, [])
+    }, [grid])
 
     return (
         <div>
-            <h1>ERCOT Zone Prices</h1>
-
-            <div style={{ marginBottom: '16px' }}>
-                <div>Current time: {now.toLocaleString()}</div>
-                <div>Last refreshed: {lastRefreshed ? lastRefreshed.toLocaleTimeString() : 'Never'}</div>
-            </div>
+            <h2>{title}</h2>
 
             {loading && <p>Loading...</p>}
             {error && <p>Error: {error}</p>}
