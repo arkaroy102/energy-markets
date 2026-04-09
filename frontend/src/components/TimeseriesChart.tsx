@@ -6,7 +6,7 @@ import { fetchLocations, fetchTimeseries } from '../api/client'
 import type { NodeLocation, PricePoint } from '../types/market'
 
 const GRIDS = ['ERCOT', 'NYISO', 'CAISO']
-const LINE_COLORS = ['#2563eb', '#dc2626', '#16a34a', '#d97706']
+const LINE_COLORS = ['#4c72b0', '#c44e52', '#55a868', '#dd8452']
 
 function todayLocal(): string {
     return new Date().toLocaleDateString('en-CA')
