@@ -4,6 +4,9 @@ import requests
 import threading
 import time
 from datetime import datetime
+from zoneinfo import ZoneInfo
+
+_ct = ZoneInfo("America/Chicago")
 
 logger = logging.getLogger(__name__)
 
@@ -69,8 +72,8 @@ class ErcotClient:
     def _fetch_page(self, start: datetime, end: datetime, page: int, batch_size: int, timeout: int, max_retries: int):
         backoff = 1.0
         params = {
-            "SCEDTimestampFrom": start.strftime("%Y-%m-%dT%H:%M:%S"),
-            "SCEDTimestampTo": end.strftime("%Y-%m-%dT%H:%M:%S"),
+            "SCEDTimestampFrom": start.astimezone(_ct).strftime("%Y-%m-%dT%H:%M:%S"),
+            "SCEDTimestampTo": end.astimezone(_ct).strftime("%Y-%m-%dT%H:%M:%S"),
             "size": batch_size,
             "page": page,
         }

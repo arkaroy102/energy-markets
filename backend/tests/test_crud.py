@@ -288,6 +288,66 @@ def test_delete_locations_cascades_prices(client):
 
 
 # ---------------------------------------------------------------------------
+# Latest timestamp endpoint
+# ---------------------------------------------------------------------------
+
+def test_latest_timestamp_empty_db(client):
+    clear_state(client)
+
+    r = client.get("/internal/prices/latest-timestamp", params={"grid": "ERCOT"})
+    assert r.status_code == 200
+    assert r.json()["timestamp_utc"] is None
+
+    clear_state(client)
+
+
+def test_latest_timestamp_returns_max_for_grid(client):
+    clear_state(client)
+
+    node_id = _create_node(client)
+    client.post("/internal/prices/batch", json=[
+        {"node_id": node_id, "timestamp_utc": TS1, "lmp": 10.0},
+        {"node_id": node_id, "timestamp_utc": TS2, "lmp": 20.0},
+        {"node_id": node_id, "timestamp_utc": TS3, "lmp": 30.0},
+    ])
+
+    r = client.get("/internal/prices/latest-timestamp", params={"grid": "ERCOT"})
+    assert r.status_code == 200
+    stored = datetime.fromisoformat(r.json()["timestamp_utc"])
+    assert stored == datetime.fromisoformat(TS3)
+
+    clear_state(client)
+
+
+def test_latest_timestamp_isolates_by_grid(client):
+    """ERCOT latest-timestamp must not be influenced by prices from other grids."""
+    clear_state(client)
+
+    ercot_id = _create_node(client, "HB_NORTH")
+    nyiso_rows = client.post("/internal/locations/batch", json=[
+        {"grid": "NYISO", "node_name": "CAPITL", "node_type": "ELECTRICAL_BUS"},
+    ]).json()
+    nyiso_id = nyiso_rows[0]["node_id"]
+
+    client.post("/internal/prices/batch", json=[
+        {"node_id": ercot_id, "timestamp_utc": TS1, "lmp": 10.0},
+        {"node_id": nyiso_id, "timestamp_utc": TS3, "lmp": 99.0},  # later, different grid
+    ])
+
+    r = client.get("/internal/prices/latest-timestamp", params={"grid": "ERCOT"})
+    assert r.status_code == 200
+    stored = datetime.fromisoformat(r.json()["timestamp_utc"])
+    assert stored == datetime.fromisoformat(TS1)  # must not see TS3 from NYISO
+
+    clear_state(client)
+
+
+def test_latest_timestamp_missing_grid_param(client):
+    r = client.get("/internal/prices/latest-timestamp")
+    assert r.status_code == 422
+
+
+# ---------------------------------------------------------------------------
 # Timeseries endpoint (public API)
 # ---------------------------------------------------------------------------
 

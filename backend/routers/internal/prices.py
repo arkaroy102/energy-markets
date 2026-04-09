@@ -4,7 +4,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy import func
 
 from db import get_db
-from models import NodePrice
+from models import GridEnum, Node, NodePrice
 from schemas import PriceCreate, PriceResponse, LatestTimestampResponse
 from redis_client import redis_client
 
@@ -44,8 +44,13 @@ def get_latest_prices(db: Session = Depends(get_db)):
     return [{"node_id": row.node_id, "timestamp_utc": row.timestamp_utc, "lmp": row.lmp} for row in rows]
 
 @router.get("/latest-timestamp", response_model=LatestTimestampResponse)
-def get_latest_price_timestamp(db: Session = Depends(get_db)):
-    latest_timestamp = db.query(func.max(NodePrice.timestamp_utc)).scalar()
+def get_latest_price_timestamp(grid: GridEnum = Query(...), db: Session = Depends(get_db)):
+    latest_timestamp = (
+        db.query(func.max(NodePrice.timestamp_utc))
+        .join(Node, NodePrice.node_id == Node.node_id)
+        .filter(Node.grid == grid)
+        .scalar()
+    )
     return {"timestamp_utc": latest_timestamp}
 
 @router.get("/{node_id}", response_model=list[PriceResponse])
