@@ -139,7 +139,7 @@ def test_create_single_price(client):
     clear_state(client)
 
     node_id = _create_node(client)
-    r = client.post("/internal/prices", json={
+    r = client.post("/internal/prices", params={"grid": "ERCOT"}, json={
         "node_id": node_id,
         "timestamp_utc": TS1,
         "lmp": 42.5,
