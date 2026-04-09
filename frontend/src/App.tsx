@@ -1,10 +1,9 @@
-import { useEffect, useState } from 'react'
+import { memo, useEffect, useState } from 'react'
 import ZonePriceTable from './components/ZonePriceTable'
 import TimeseriesChart from './components/TimeseriesChart'
 
-export default function App() {
+const Clock = memo(function Clock({ lastRefreshed }: { lastRefreshed: Date | null }) {
     const [now, setNow] = useState(new Date())
-    const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null)
 
     useEffect(() => {
         const id = window.setInterval(() => setNow(new Date()), 1000)
@@ -12,12 +11,20 @@ export default function App() {
     }, [])
 
     return (
+        <div style={{ marginBottom: '24px' }}>
+            <div>Current time: {now.toLocaleString()}</div>
+            <div>Last refreshed: {lastRefreshed ? lastRefreshed.toLocaleTimeString() : 'Never'}</div>
+        </div>
+    )
+})
+
+export default function App() {
+    const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null)
+
+    return (
         <div style={{ padding: '24px', fontFamily: 'sans-serif' }}>
             <h1>Real-Time LMP Dashboard</h1>
-            <div style={{ marginBottom: '24px' }}>
-                <div>Current time: {now.toLocaleString()}</div>
-                <div>Last refreshed: {lastRefreshed ? lastRefreshed.toLocaleTimeString() : 'Never'}</div>
-            </div>
+            <Clock lastRefreshed={lastRefreshed} />
 
             <ZonePriceTable grid="ERCOT" title="ERCOT Zone Prices" onRefresh={setLastRefreshed} />
             <hr style={{ margin: '32px 0' }} />

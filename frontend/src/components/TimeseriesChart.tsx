@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts'
@@ -110,7 +110,7 @@ function buildChartData(allSeries: { config: SeriesConfig; data: PricePoint[] }[
     })
 }
 
-export default function TimeseriesChart() {
+export default memo(function TimeseriesChart() {
     const [sharedDate, setSharedDate] = useState(todayLocal())
     const [configs, setConfigs] = useState<SeriesConfig[]>([
         { id: nextId++, grid: 'ERCOT', node: '' },
@@ -295,4 +295,4 @@ export default function TimeseriesChart() {
             )}
         </div>
     )
-}
+})

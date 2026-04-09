@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { memo, useEffect, useState } from 'react'
 import { fetchLatestZonePrices } from '../api/client'
 import type { ZonePrice } from '../types/market'
 
@@ -8,7 +8,7 @@ interface Props {
     onRefresh?: (time: Date) => void
 }
 
-export default function ZonePriceTable({ grid, title, onRefresh }: Props) {
+export default memo(function ZonePriceTable({ grid, title, onRefresh }: Props) {
     const [rows, setRows] = useState<ZonePrice[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
@@ -77,4 +77,4 @@ export default function ZonePriceTable({ grid, title, onRefresh }: Props) {
             )}
         </div>
     )
-}
+})
