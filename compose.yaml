@@ -62,5 +62,3 @@ services:
 
 volumes:
   postgres_data:
-    external: true
-    name: 73ac70ca4bea3c8921e139003c55a16777bf1dd1f6e4a68f374ebf5cbafb754f

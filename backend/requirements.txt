@@ -2,6 +2,5 @@ sqlalchemy
 fastapi
 pydantic
 uvicorn
-psycopg2
 psycopg2-binary
 redis

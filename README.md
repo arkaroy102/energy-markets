@@ -49,9 +49,13 @@ The ingestion services use a producer-consumer threading pattern: a fetcher thre
 Create a `.env` file in the project root. This is only required if you want ERCOT data — NYISO requires no credentials.
 
 ```bash
+# ERCOT credentials (optional — only needed for ERCOT ingestion)
 ERCOT_USERNAME=your_ercot_email@example.com
 ERCOT_PASSWORD=your_ercot_password
 ERCOT_SUBSCRIPTION_KEY=your_subscription_key
+
+# Test database (optional — only needed to run backend tests)
+TEST_DATABASE_URL=postgresql://postgres:mypassword@localhost:5432/energymarkets_test
 ```
 
 ERCOT API credentials are free — register at the [ERCOT API Portal](https://developer.ercot.com). If you skip this, NYISO ingestion still runs and the dashboard will populate with New York data.
@@ -102,10 +106,10 @@ There is currently no historical data import. The dashboard shows live prices fr
 The backend has integration tests that run against a real Postgres database. See [`backend/tests/README.md`](backend/tests/README.md) for setup and usage.
 
 ```bash
-# Quick start (assumes Docker stack is running)
+# One-time: create the test database (assumes Docker stack is running)
 docker exec energymarkets-db-1 psql -U postgres -c "CREATE DATABASE energymarkets_test;"
 
+# Run tests (TEST_DATABASE_URL sourced from .env)
 cd backend
-TEST_DATABASE_URL=postgresql://postgres:mypassword@localhost:5432/energymarkets_test \
-  python -m pytest tests/test_crud.py -v
+source ../.env && python -m pytest tests/test_crud.py -v
 ```
