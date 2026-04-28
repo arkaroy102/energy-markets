@@ -2,12 +2,16 @@ import requests
 import os
 
 BACKEND_URL = os.getenv('BACKEND_URL', default="http://localhost:8000")
+INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY")
+
+_headers = {"X-Internal-Key": INTERNAL_API_KEY} if INTERNAL_API_KEY else {}
 
 
 def get_locations(grid: str):
     r = requests.get(
         f"{BACKEND_URL}/internal/locations",
         params={"grid": grid},
+        headers=_headers,
         timeout=30,
     )
     r.raise_for_status()
@@ -18,6 +22,7 @@ def get_latest_timestamp(grid: str):
     r = requests.get(
         f"{BACKEND_URL}/internal/prices/latest-timestamp",
         params={"grid": grid},
+        headers=_headers,
         timeout=30,
     )
     r.raise_for_status()
@@ -31,6 +36,7 @@ def put_locations(locations: list[dict]):
     r = requests.post(
         f"{BACKEND_URL}/internal/locations/batch",
         json=locations,
+        headers=_headers,
         timeout=60,
     )
     r.raise_for_status()
@@ -47,6 +53,7 @@ def put_prices(payload: list[dict], grid: str):
         f"{BACKEND_URL}/internal/prices/batch",
         params={"grid": grid},
         json=payload,
+        headers=_headers,
         timeout=30,
     )
     r.raise_for_status()

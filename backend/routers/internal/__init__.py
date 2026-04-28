@@ -1,11 +1,15 @@
-from fastapi import APIRouter, Depends
+import os
+from fastapi import APIRouter, Depends, Header, HTTPException
 
-# --- Internal auth dependency ---
-# No-op today — Docker Compose network provides isolation.
-# Future: validate X-Internal-Token header against an env var,
-# or use cloud IAM/mTLS depending on deployment platform.
-def verify_internal_caller():
-    pass
+INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY")
+
+
+def verify_internal_caller(x_internal_key: str = Header(...)):
+    if not INTERNAL_API_KEY:
+        raise HTTPException(status_code=500, detail="INTERNAL_API_KEY not configured")
+    if x_internal_key != INTERNAL_API_KEY:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
 
 internal_router = APIRouter(
     prefix="/internal",

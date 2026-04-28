@@ -49,6 +49,9 @@ The ingestion services use a producer-consumer threading pattern: a fetcher thre
 Create a `.env` file in the project root. This is only required if you want ERCOT data — NYISO requires no credentials.
 
 ```bash
+# Shared secret between backend and ingestion services
+INTERNAL_API_KEY=your_secret_key_here
+
 # ERCOT credentials (optional — only needed for ERCOT ingestion)
 ERCOT_USERNAME=your_ercot_email@example.com
 ERCOT_PASSWORD=your_ercot_password

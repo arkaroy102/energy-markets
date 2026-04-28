@@ -13,5 +13,7 @@ from runner import app
 
 @pytest.fixture(scope="session")
 def client():
-    with TestClient(app) as c:
+    internal_key = os.environ.get("INTERNAL_API_KEY", "test-key")
+    os.environ.setdefault("INTERNAL_API_KEY", internal_key)
+    with TestClient(app, headers={"X-Internal-Key": internal_key}) as c:
         yield c
