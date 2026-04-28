@@ -1,8 +1,8 @@
-FROM python:latest
+FROM python:3.13-slim
 
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
 COPY . .
 
-CMD ["python", "ercot_ingestion.py"]
+CMD ["python", "-u", "ingestion.py"]
