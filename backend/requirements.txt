@@ -4,3 +4,4 @@ pydantic
 uvicorn
 psycopg2-binary
 redis
+alembic

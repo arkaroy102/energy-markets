@@ -4,8 +4,6 @@ import time
 
 from fastapi import FastAPI, Request
 
-from db import engine
-from models import Base
 from routers.internal import internal_router
 from routers.internal.locations import router as internal_locations_router
 from routers.internal.prices import router as internal_prices_router
@@ -18,8 +16,6 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)-8s %(message)s",
 )
 logger = logging.getLogger(__name__)
-
-Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
