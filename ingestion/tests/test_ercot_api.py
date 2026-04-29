@@ -4,6 +4,8 @@ from zoneinfo import ZoneInfo
 
 from ercot_api import TokenManager, ErcotClient, USERNAME, PASSWORD
 
+pytestmark = pytest.mark.integration
+
 ct = ZoneInfo("America/Chicago")
 
 

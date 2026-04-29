@@ -2,6 +2,8 @@ import pytest
 from datetime import date
 from nyiso.api import NYISOAPIClient
 
+pytestmark = pytest.mark.integration
+
 
 @pytest.fixture(scope="module")
 def client():
