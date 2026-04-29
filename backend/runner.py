@@ -3,6 +3,7 @@ import os
 import time
 
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 
 from routers.internal import internal_router
 from routers.internal.locations import router as internal_locations_router
@@ -18,6 +19,13 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=os.getenv("ALLOWED_ORIGINS", "*").split(","),
+    allow_methods=["GET"],
+    allow_headers=["*"],
+)
 
 internal_router.include_router(internal_locations_router)
 internal_router.include_router(internal_prices_router)
