@@ -264,10 +264,11 @@ export default memo(function TimeseriesChart() {
                         />
                         <Tooltip
                             labelFormatter={key => utcKeyToLocalTime(key as string, sharedDate)}
-                            formatter={(value, name: string) => {
-                                const idx = configs.findIndex(c => `lmp_${c.id}` === name)
+                            formatter={(value, name) => {
+                                const nameStr = String(name)
+                                const idx = configs.findIndex(c => `lmp_${c.id}` === nameStr)
                                 const config = configs[idx]
-                                const label = config ? `${config.node} (${config.grid})` : name
+                                const label = config ? `${config.node} (${config.grid})` : nameStr
                                 return [`${Number(value).toFixed(2)} $/MWh`, label]
                             }}
                         />
