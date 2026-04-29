@@ -1,7 +1,9 @@
 import type { ZonePrice, NodeLocation, PricePoint } from '../types/market'
 
+const BASE_URL = import.meta.env.VITE_BACKEND_URL ?? ''
+
 export async function fetchLatestZonePrices(grid: string): Promise<ZonePrice[]> {
-    const response = await fetch(`/api/prices/zone-summary?grid=${encodeURIComponent(grid)}`)
+    const response = await fetch(`${BASE_URL}/api/prices/zone-summary?grid=${encodeURIComponent(grid)}`)
 
     if (!response.ok) {
         throw new Error(`Failed to fetch zone prices: ${response.status}`)
@@ -11,7 +13,7 @@ export async function fetchLatestZonePrices(grid: string): Promise<ZonePrice[]> 
 }
 
 export async function fetchLocations(grid: string): Promise<NodeLocation[]> {
-    const response = await fetch(`/api/locations?grid=${encodeURIComponent(grid)}`)
+    const response = await fetch(`${BASE_URL}/api/locations?grid=${encodeURIComponent(grid)}`)
 
     if (!response.ok) {
         throw new Error(`Failed to fetch locations: ${response.status}`)
@@ -22,7 +24,7 @@ export async function fetchLocations(grid: string): Promise<NodeLocation[]> {
 
 export async function fetchTimeseries(grid: string, nodeName: string, date: string): Promise<PricePoint[]> {
     const params = new URLSearchParams({ grid, node_name: nodeName, date })
-    const response = await fetch(`/api/prices/timeseries?${params}`)
+    const response = await fetch(`${BASE_URL}/api/prices/timeseries?${params}`)
 
     if (!response.ok) {
         throw new Error(`Failed to fetch timeseries: ${response.status}`)
