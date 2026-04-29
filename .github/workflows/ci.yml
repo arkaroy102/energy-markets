@@ -31,6 +31,7 @@ jobs:
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
       TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+      INTERNAL_API_KEY: test-key
 
     steps:
       - uses: actions/checkout@v4
