@@ -7,3 +7,4 @@ redis
 alembic
 pytest
 httpx
+sentry-sdk[fastapi]

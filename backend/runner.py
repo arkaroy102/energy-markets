@@ -18,6 +18,16 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+import sentry_sdk
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+from sentry_sdk.integrations.starlette import StarletteIntegration
+
+sentry_sdk.init(
+    dsn=os.getenv("SENTRY_DSN"),
+    integrations=[StarletteIntegration(), FastApiIntegration()],
+    traces_sample_rate=0.01,
+)
+
 app = FastAPI()
 
 app.add_middleware(

@@ -5,6 +5,9 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 
+import sentry_sdk
+sentry_sdk.init(dsn=os.getenv("SENTRY_DSN"))
+
 logger = logging.getLogger(__name__)
 
 import backend_client
@@ -148,6 +151,7 @@ def writer(client: GridClient):
 
 
 def _thread_excepthook(args):
+    sentry_sdk.capture_exception(args.exc_value)
     logger.critical(
         f"Unhandled exception in thread {args.thread.name}, exiting",
         exc_info=(args.exc_type, args.exc_value, args.exc_traceback),
