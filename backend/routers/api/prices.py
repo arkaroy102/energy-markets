@@ -7,13 +7,14 @@ from sqlalchemy import func, and_
 
 from db import get_db
 from models import Node, NodePrice, GridEnum
-from schemas import ZonePriceResponse, TimeseriesPoint
-from redis_client import redis_client, zone_price_cache_key
+from schemas import ZonePriceResponse, TimeseriesPoint, MapNodeResponse
+from redis_client import redis_client, zone_price_cache_key, map_nodes_cache_key
 
 import logging
 logger = logging.getLogger(__name__)
 
 CACHE_TTL_SECONDS_LATEST_ZONE_PRICES = 300  # 5 minutes
+CACHE_TTL_SECONDS_MAP_NODES = 300  # 5 minutes
 
 router = APIRouter(prefix="/prices", tags=["api-prices"])
 
@@ -111,6 +112,100 @@ def get_latest_zone_prices(grid: GridEnum, request: Request, db: Session = Depen
             CACHE_TTL_SECONDS_LATEST_ZONE_PRICES,
             json.dumps(result),
         )
+    except Exception as exc:
+        logger.warning(f"Redis write failed: {exc}")
+
+    return result
+
+
+@router.get("/map-nodes", response_model=list[MapNodeResponse])
+def get_map_nodes(grid: GridEnum, request: Request, db: Session = Depends(get_db)):
+    cache_key = map_nodes_cache_key(grid.value)
+    try:
+        cached = redis_client.get(cache_key)
+        if cached:
+            request.state.cache_status = "hit"
+            return json.loads(cached)
+        else:
+            request.state.cache_status = "miss"
+    except Exception as exc:
+        request.state.cache_status = "error"
+        logger.warning(f"Redis exception: {exc}")
+
+    # Step 1: for each node, find the timestamp of its most recent price.
+    # Compresses all of node_prices down to one row per node — no LMP values yet.
+    # CTE so PostgreSQL materializes this once; it is referenced by both step 2 and
+    # step 3, and a subquery would cause node_prices to be scanned twice.
+    latest_per_node = (
+        db.query(
+            NodePrice.node_id.label("node_id"),
+            func.max(NodePrice.timestamp_utc).label("latest_ts"),
+        )
+        .group_by(NodePrice.node_id)
+        .cte()
+    )
+
+    # Step 2: join back to node_prices on (node_id, timestamp) to fetch the actual LMP
+    # at that latest timestamp. Result: one row per node with its current LMP.
+    # CTE for the same reason — referenced in both zone_avgs_sq and the final query.
+    latest_prices_sq = (
+        db.query(NodePrice.node_id, NodePrice.lmp)
+        .join(
+            latest_per_node,
+            and_(
+                NodePrice.node_id == latest_per_node.c.node_id,
+                NodePrice.timestamp_utc == latest_per_node.c.latest_ts,
+            ),
+        )
+        .cte()
+    )
+
+    # Step 3: compute zone averages using the latest LMP per node across ALL nodes in
+    # the grid — not just geocoded ones — so the benchmark is representative.
+    zone_avgs_sq = (
+        db.query(
+            Node.settlement_load_zone.label("zone"),
+            func.avg(latest_prices_sq.c.lmp).label("zone_avg_lmp"),
+        )
+        .join(latest_prices_sq, Node.node_id == latest_prices_sq.c.node_id)
+        .filter(Node.grid == grid, Node.settlement_load_zone.isnot(None))
+        .group_by(Node.settlement_load_zone)
+        .subquery()
+    )
+
+    # Step 4: filter to geocoded nodes only, then attach LMP and zone average via outer
+    # joins so nodes with no price data yet still appear (lmp will be null).
+    rows = (
+        db.query(
+            Node.node_id,
+            Node.node_name,
+            Node.latitude,
+            Node.longitude,
+            Node.settlement_load_zone,
+            latest_prices_sq.c.lmp,
+            zone_avgs_sq.c.zone_avg_lmp,
+        )
+        .outerjoin(latest_prices_sq, Node.node_id == latest_prices_sq.c.node_id)
+        .outerjoin(zone_avgs_sq, Node.settlement_load_zone == zone_avgs_sq.c.zone)
+        .filter(Node.grid == grid, Node.latitude.isnot(None), Node.longitude.isnot(None))
+        .all()
+    )
+
+    result = [
+        {
+            "node_id": row.node_id,
+            "node_name": row.node_name,
+            "latitude": float(row.latitude),
+            "longitude": float(row.longitude),
+            "settlement_load_zone": row.settlement_load_zone,
+            "lmp": float(row.lmp) if row.lmp is not None else None,
+            "zone_avg_lmp": float(row.zone_avg_lmp) if row.zone_avg_lmp is not None else None,
+        }
+        for row in rows
+    ]
+
+    try:
+        redis_client.setex(cache_key, CACHE_TTL_SECONDS_MAP_NODES, json.dumps(result))
     except Exception as exc:
         logger.warning(f"Redis write failed: {exc}")
 

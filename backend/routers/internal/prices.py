@@ -6,7 +6,7 @@ from sqlalchemy import func
 from db import get_db
 from models import GridEnum, Node, NodePrice
 from schemas import PriceCreate, PriceResponse, LatestTimestampResponse
-from redis_client import redis_client, zone_price_cache_key
+from redis_client import redis_client, zone_price_cache_key, map_nodes_cache_key
 
 import logging
 logger = logging.getLogger(__name__)
@@ -27,7 +27,7 @@ def insert_prices(db: Session, prices: list[PriceCreate], grid: GridEnum):
     db.commit()
 
     try:
-        redis_client.delete(zone_price_cache_key(grid.value))
+        redis_client.delete(zone_price_cache_key(grid.value), map_nodes_cache_key(grid.value))
     except Exception as exc:
         logger.warning(f"Redis cache invalidation failed: {exc}")
 
