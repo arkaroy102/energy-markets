@@ -10,10 +10,6 @@ _ct = ZoneInfo("America/Chicago")
 
 logger = logging.getLogger(__name__)
 
-USERNAME = os.environ["ERCOT_USERNAME"]
-PASSWORD = os.environ["ERCOT_PASSWORD"]
-SUBSCRIPTION_KEY = os.environ["ERCOT_SUBSCRIPTION_KEY"]
-
 SCOPE = "openid+fec253ea-0d06-4272-a5e6-b478baeecd70+offline_access"
 CLIENT_ID = "fec253ea-0d06-4272-a5e6-b478baeecd70"
 
@@ -58,7 +54,11 @@ class TokenManager():
 class ErcotClient:
     def __init__(self):
         self._session = requests.Session()
-        self._token_manager = TokenManager(USERNAME, PASSWORD)
+        self._token_manager = TokenManager(
+            os.environ["ERCOT_USERNAME"],
+            os.environ["ERCOT_PASSWORD"],
+        )
+        self._subscription_key = os.environ["ERCOT_SUBSCRIPTION_KEY"]
 
     def iter_pages(self, start: datetime, end: datetime, timeout=60, max_retries=5, batch_size=10000):
         page = 1
@@ -81,7 +81,7 @@ class ErcotClient:
 
         headers = {
             "Authorization": f"Bearer {self._token_manager.get_token()}",
-            "Ocp-Apim-Subscription-Key": SUBSCRIPTION_KEY,
+            "Ocp-Apim-Subscription-Key": self._subscription_key,
         }
         for attempt in range(max_retries + 1):
             try:
