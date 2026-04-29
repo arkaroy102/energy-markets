@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from sqlalchemy.dialects.postgresql import insert
 
@@ -24,8 +25,12 @@ def insert_locations(db: Session, locations: list[LocationCreate]):
         }
         for p in locations
     ])
-    stmt = stmt.on_conflict_do_nothing(
-        index_elements=["grid", "node_name"]
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["grid", "node_name"],
+        set_={
+            "latitude": func.coalesce(stmt.excluded.latitude, Node.latitude),
+            "longitude": func.coalesce(stmt.excluded.longitude, Node.longitude),
+        }
     ).returning(Node.node_id, Node.grid, Node.node_name, Node.node_type)
 
     result = db.execute(stmt)
@@ -49,7 +54,7 @@ def create_locations(locations: list[LocationCreate], db: Session = Depends(get_
 @router.get("", response_model=list[LocationSummary])
 def get_locations(grid: GridEnum, db: Session = Depends(get_db)):
     rows = db.query(Node).filter(Node.grid == grid).all()
-    return [{"node_id": row.node_id, "node_name": row.node_name} for row in rows]
+    return [{"node_id": row.node_id, "node_name": row.node_name, "latitude": row.latitude, "longitude": row.longitude} for row in rows]
 
 @router.delete("")
 def delete_all_locations(db: Session = Depends(get_db)):

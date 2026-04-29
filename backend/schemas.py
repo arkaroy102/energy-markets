@@ -25,6 +25,8 @@ class LocationResponse(BaseModel):
 class LocationSummary(BaseModel):
     node_id: int
     node_name: str
+    latitude: float | None = None
+    longitude: float | None = None
 
 class PriceCreate(BaseModel):
     node_id: int

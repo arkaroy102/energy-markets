@@ -87,19 +87,69 @@ def test_read_locations_by_grid(client):
 
 
 def test_create_location_idempotent(client):
-    """Inserting the same node twice returns only one result (on_conflict_do_nothing)."""
+    """Calling the batch endpoint twice with the same node results in one node in the DB."""
     clear_state(client)
 
-    payload = [
-        {"grid": "ERCOT", "node_name": "HB_NORTH", "node_type": "ELECTRICAL_BUS"},
-        {"grid": "ERCOT", "node_name": "HB_NORTH", "node_type": "ELECTRICAL_BUS"},
-    ]
-    r = client.post("/internal/locations/batch", json=payload)
-    assert r.status_code == 200
-    assert len(r.json()) == 1
+    payload = [{"grid": "ERCOT", "node_name": "HB_NORTH", "node_type": "ELECTRICAL_BUS"}]
+    client.post("/internal/locations/batch", json=payload)
+    client.post("/internal/locations/batch", json=payload)
 
     r = client.get("/internal/locations", params={"grid": "ERCOT"})
     assert len(r.json()) == 1
+
+    clear_state(client)
+
+
+def test_create_location_upserts_latlon(client):
+    """Second insert with lat/lon updates coordinates on existing node."""
+    clear_state(client)
+
+    r = client.post("/internal/locations/batch", json=[
+        {"grid": "ERCOT", "node_name": "HB_NORTH", "node_type": "ELECTRICAL_BUS"},
+    ])
+    assert r.status_code == 200
+
+    r = client.get("/api/locations", params={"grid": "ERCOT"})
+    assert r.status_code == 200
+    node = next(n for n in r.json() if n["node_name"] == "HB_NORTH")
+    assert node["latitude"] is None
+    assert node["longitude"] is None
+
+    r = client.post("/internal/locations/batch", json=[
+        {"grid": "ERCOT", "node_name": "HB_NORTH", "node_type": "ELECTRICAL_BUS",
+         "latitude": 31.5, "longitude": -97.1},
+    ])
+    assert r.status_code == 200
+
+    r = client.get("/api/locations", params={"grid": "ERCOT"})
+    assert r.status_code == 200
+    node = next(n for n in r.json() if n["node_name"] == "HB_NORTH")
+    assert abs(node["latitude"] - 31.5) < 1e-6
+    assert abs(node["longitude"] - (-97.1)) < 1e-6
+
+    clear_state(client)
+
+
+def test_create_location_upsert_does_not_overwrite_latlon_with_null(client):
+    """Second insert without lat/lon preserves existing coordinates."""
+    clear_state(client)
+
+    r = client.post("/internal/locations/batch", json=[
+        {"grid": "ERCOT", "node_name": "HB_NORTH", "node_type": "ELECTRICAL_BUS",
+         "latitude": 31.5, "longitude": -97.1},
+    ])
+    assert r.status_code == 200
+
+    r = client.post("/internal/locations/batch", json=[
+        {"grid": "ERCOT", "node_name": "HB_NORTH", "node_type": "ELECTRICAL_BUS"},
+    ])
+    assert r.status_code == 200
+
+    r = client.get("/api/locations", params={"grid": "ERCOT"})
+    assert r.status_code == 200
+    node = next(n for n in r.json() if n["node_name"] == "HB_NORTH")
+    assert abs(node["latitude"] - 31.5) < 1e-6
+    assert abs(node["longitude"] - (-97.1)) < 1e-6
 
     clear_state(client)
 
