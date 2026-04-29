@@ -1,8 +1,9 @@
+import os
 import pytest
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from ercot_api import TokenManager, ErcotClient, USERNAME, PASSWORD
+from ercot_api import TokenManager, ErcotClient
 
 pytestmark = pytest.mark.integration
 
@@ -10,7 +11,7 @@ ct = ZoneInfo("America/Chicago")
 
 
 def test_token_manager():
-    tm = TokenManager(USERNAME, PASSWORD)
+    tm = TokenManager(os.environ["ERCOT_USERNAME"], os.environ["ERCOT_PASSWORD"])
     token = tm.get_token()
 
     print(f"\nToken (first 20 chars): {token[:20]}...")

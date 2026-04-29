@@ -34,6 +34,10 @@ for arg in "$@"; do
 done
 
 if $run_backend; then
+    echo "=== Starting database ==="
+    docker compose up db -d --wait
+    trap 'docker compose stop db' EXIT
+
     echo "=== Backend tests ==="
     (cd backend && python -m pytest tests/ -v "${pytest_args[@]+"${pytest_args[@]}"}")
 fi
