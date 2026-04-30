@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback, useRef, memo } from 'react'
+import { useState, useEffect, useCallback, memo } from 'react'
 import Map, { Source, Layer } from 'react-map-gl/maplibre'
-import type { MapRef, MapLayerMouseEvent } from 'react-map-gl/maplibre'
-import type { CircleLayer, SymbolLayer } from 'maplibre-gl'
-import type { GeoJSONSource } from 'maplibre-gl'
+import type { MapLayerMouseEvent } from 'react-map-gl/maplibre'
+
+import type { CircleLayerSpecification } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 
 const MAP_STYLE = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json'
@@ -10,8 +10,6 @@ const POLL_MS = 5000
 const GRIDS = ['ERCOT', 'NYISO']
 const SOURCE_ID = 'nodes'
 const UNCLUSTERED_ID = 'nodes-unclustered'
-const CLUSTER_ID = 'nodes-cluster'
-const CLUSTER_COUNT_ID = 'nodes-cluster-count'
 
 interface MapNode {
     node_id: number
@@ -57,7 +55,7 @@ function toGeoJSON(nodes: MapNode[]) {
     }
 }
 
-const unclusteredLayer: CircleLayer = {
+const unclusteredLayer: CircleLayerSpecification = {
     id: UNCLUSTERED_ID,
     type: 'circle',
     source: SOURCE_ID,
@@ -88,44 +86,11 @@ const unclusteredLayer: CircleLayer = {
     },
 }
 
-const clusterLayer: CircleLayer = {
-    id: CLUSTER_ID,
-    type: 'circle',
-    filter: ['has', 'point_count'],
-    paint: {
-        'circle-color': [
-            'step', ['get', 'point_count'],
-            '#4e9af1',
-            10, '#f1c40f',
-            30, '#e67e22',
-        ],
-        'circle-radius': ['step', ['get', 'point_count'], 18, 10, 26, 30, 36],
-        'circle-opacity': 0.85,
-        'circle-stroke-width': 2,
-        'circle-stroke-color': '#ffffff',
-    },
-}
-
-const clusterCountLayer: SymbolLayer = {
-    id: CLUSTER_COUNT_ID,
-    type: 'symbol',
-    source: SOURCE_ID,
-    filter: ['has', 'point_count'],
-    layout: {
-        'text-field': '{point_count_abbreviated}',
-        'text-font': ['Noto Sans Regular'],
-        'text-size': 12,
-    },
-    paint: {
-        'text-color': '#ffffff',
-    },
-}
 
 export default memo(function MapView() {
     const [nodes, setNodes] = useState<MapNode[]>([])
     const [tooltip, setTooltip] = useState<TooltipState | null>(null)
     const [cursor, setCursor] = useState('auto')
-    const mapRef = useRef<MapRef>(null)
 
     useEffect(() => {
         let cancelled = false
@@ -163,33 +128,17 @@ export default memo(function MapView() {
         }
     }, [])
 
-    const onClick = useCallback((e: MapLayerMouseEvent) => {
-        const features = e.features
-        if (!features || features.length === 0) return
-        const f = features[0]
-        if (f.layer.id === CLUSTER_ID && mapRef.current) {
-            const source = mapRef.current.getSource(SOURCE_ID) as GeoJSONSource
-            const clusterId = (f.properties as Record<string, number>).cluster_id
-            const coords = (f.geometry as GeoJSON.Point).coordinates as [number, number]
-            source.getClusterExpansionZoom(clusterId).then(zoom => {
-                mapRef.current?.flyTo({ center: coords, zoom, duration: 600 })
-            })
-        }
-    }, [])
-
     const geoJSON = toGeoJSON(nodes)
 
     return (
         <div style={{ position: 'relative', height: 480, borderRadius: 8, overflow: 'hidden', cursor }}>
             <Map
-                ref={mapRef}
                 initialViewState={{ longitude: -90, latitude: 38, zoom: 4 }}
                 style={{ width: '100%', height: '100%' }}
                 mapStyle={MAP_STYLE}
-                interactiveLayerIds={[UNCLUSTERED_ID, CLUSTER_ID]}
+                interactiveLayerIds={[UNCLUSTERED_ID]}
                 onMouseMove={onMouseMove}
                 onMouseLeave={() => { setTooltip(null); setCursor('auto') }}
-                onClick={onClick}
             >
                 <Source
                     id={SOURCE_ID}
