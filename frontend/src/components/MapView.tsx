@@ -1,8 +1,6 @@
 import { useState, useEffect, useCallback, memo } from 'react'
 import Map, { Source, Layer } from 'react-map-gl/maplibre'
 import type { MapLayerMouseEvent } from 'react-map-gl/maplibre'
-
-import type { CircleLayerSpecification } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 
 const MAP_STYLE = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json'
@@ -55,7 +53,7 @@ function toGeoJSON(nodes: MapNode[]) {
     }
 }
 
-const unclusteredLayer: CircleLayerSpecification = {
+const unclusteredLayer = {
     id: UNCLUSTERED_ID,
     type: 'circle',
     source: SOURCE_ID,
@@ -146,7 +144,7 @@ export default memo(function MapView() {
                     data={geoJSON}
                     cluster={false}
                 >
-                    <Layer {...unclusteredLayer} />
+                    <Layer {...(unclusteredLayer as any)} />
                 </Source>
             </Map>
 
