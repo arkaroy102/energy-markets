@@ -164,7 +164,7 @@ if __name__ == "__main__":
     import argparse
 
     CLIENTS = {
-        "ERCOT": "ercot_client.ERCOTClient",
+        "ERCOT": "ercot.client.ERCOTClient",
         "NYISO": "nyiso.client.NYISOClient",
     }
 
