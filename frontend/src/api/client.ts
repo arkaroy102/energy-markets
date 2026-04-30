@@ -1,4 +1,4 @@
-import type { ZonePrice, NodeLocation, PricePoint } from '../types/market'
+import type { ZonePrice, NodeLocation, PricePoint, MapNode } from '../types/market'
 
 export const BASE_URL = import.meta.env.VITE_BACKEND_URL ?? ''
 
@@ -28,6 +28,16 @@ export async function fetchTimeseries(grid: string, nodeName: string, date: stri
 
     if (!response.ok) {
         throw new Error(`Failed to fetch timeseries: ${response.status}`)
+    }
+
+    return response.json()
+}
+
+export async function fetchMapNodes(grid: string): Promise<MapNode[]> {
+    const response = await fetch(`${BASE_URL}/api/prices/map-nodes?grid=${encodeURIComponent(grid)}`)
+
+    if (!response.ok) {
+        throw new Error(`Failed to fetch map nodes: ${response.status}`)
     }
 
     return response.json()
