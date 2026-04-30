@@ -51,3 +51,12 @@ class LatestTimestampResponse(BaseModel):
 class TimeseriesPoint(BaseModel):
     timestamp_utc: datetime
     lmp: float
+
+class MapNodeResponse(BaseModel):
+    node_id: int
+    node_name: str
+    latitude: float
+    longitude: float
+    settlement_load_zone: str | None
+    lmp: float | None
+    zone_avg_lmp: float | None

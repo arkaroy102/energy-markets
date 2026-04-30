@@ -500,3 +500,177 @@ def test_timeseries_data_accuracy(client):
     assert stored_ts == original_ts
 
     clear_state(client)
+
+
+# ---------------------------------------------------------------------------
+# Map nodes endpoint (public API)
+# ---------------------------------------------------------------------------
+
+def _create_node_full(client, node_name, *, zone=None, lat=None, lon=None, grid="ERCOT") -> int:
+    rows = client.post("/internal/locations/batch", json=[{
+        "grid": grid,
+        "node_name": node_name,
+        "node_type": "ELECTRICAL_BUS",
+        "settlement_load_zone": zone,
+        "latitude": lat,
+        "longitude": lon,
+    }]).json()
+    return rows[0]["node_id"]
+
+
+def test_map_nodes_basic(client):
+    """Returns geocoded nodes with correct LMP and zone averages."""
+    clear_state(client)
+
+    # NORTH zone: two geocoded nodes, lmp 10 and 30 → zone avg 20
+    north_a = _create_node_full(client, "NORTH_A", zone="NORTH", lat=31.0, lon=-97.0)
+    north_b = _create_node_full(client, "NORTH_B", zone="NORTH", lat=31.5, lon=-97.5)
+    # SOUTH zone: one geocoded node, lmp 50 → zone avg 50
+    south_a = _create_node_full(client, "SOUTH_A", zone="SOUTH", lat=29.0, lon=-96.0)
+
+    post_prices(client, [
+        {"node_id": north_a, "timestamp_utc": TS1, "lmp": 10.0},
+        {"node_id": north_b, "timestamp_utc": TS1, "lmp": 30.0},
+        {"node_id": south_a, "timestamp_utc": TS1, "lmp": 50.0},
+    ])
+
+    r = client.get("/api/prices/map-nodes", params={"grid": "ERCOT"})
+    assert r.status_code == 200
+    rows = r.json()
+    assert len(rows) == 3
+
+    by_name = {row["node_name"]: row for row in rows}
+
+    assert abs(by_name["NORTH_A"]["lmp"] - 10.0) < 1e-6
+    assert abs(by_name["NORTH_B"]["lmp"] - 30.0) < 1e-6
+    assert abs(by_name["SOUTH_A"]["lmp"] - 50.0) < 1e-6
+
+    # Both NORTH nodes see the same zone avg
+    assert abs(by_name["NORTH_A"]["zone_avg_lmp"] - 20.0) < 1e-6
+    assert abs(by_name["NORTH_B"]["zone_avg_lmp"] - 20.0) < 1e-6
+    # SOUTH zone avg equals the single node's price
+    assert abs(by_name["SOUTH_A"]["zone_avg_lmp"] - 50.0) < 1e-6
+
+    # Coordinates preserved
+    assert abs(by_name["NORTH_A"]["latitude"] - 31.0) < 1e-6
+    assert abs(by_name["NORTH_A"]["longitude"] - (-97.0)) < 1e-6
+
+    clear_state(client)
+
+
+def test_map_nodes_uses_latest_timestamp(client):
+    """When a node has prices at multiple timestamps, only the most recent LMP is used."""
+    clear_state(client)
+
+    node_id = _create_node_full(client, "NODE_A", zone="NORTH", lat=31.0, lon=-97.0)
+    post_prices(client, [
+        {"node_id": node_id, "timestamp_utc": TS1, "lmp": 10.0},  # oldest
+        {"node_id": node_id, "timestamp_utc": TS2, "lmp": 20.0},
+        {"node_id": node_id, "timestamp_utc": TS3, "lmp": 30.0},  # latest
+    ])
+
+    r = client.get("/api/prices/map-nodes", params={"grid": "ERCOT"})
+    assert r.status_code == 200
+    rows = r.json()
+    assert len(rows) == 1
+    assert abs(rows[0]["lmp"] - 30.0) < 1e-6  # TS3's value, not TS1 or TS2
+
+    clear_state(client)
+
+
+def test_map_nodes_excludes_ungeocoded_nodes(client):
+    """Nodes without lat/lon do not appear in the result."""
+    clear_state(client)
+
+    geo_a  = _create_node_full(client, "GEO_A",   zone="NORTH", lat=31.0, lon=-97.0)
+    geo_b  = _create_node_full(client, "GEO_B",   zone="NORTH", lat=32.0, lon=-98.0)
+    ungeo_c = _create_node_full(client, "UNGEO_C", zone="NORTH")  # no lat/lon
+    ungeo_d = _create_node_full(client, "UNGEO_D", zone="NORTH")  # no lat/lon
+
+    post_prices(client, [
+        {"node_id": geo_a,   "timestamp_utc": TS1, "lmp": 10.0},
+        {"node_id": geo_b,   "timestamp_utc": TS1, "lmp": 20.0},
+        {"node_id": ungeo_c, "timestamp_utc": TS1, "lmp": 30.0},
+        {"node_id": ungeo_d, "timestamp_utc": TS1, "lmp": 40.0},
+    ])
+
+    r = client.get("/api/prices/map-nodes", params={"grid": "ERCOT"})
+    assert r.status_code == 200
+    rows = r.json()
+    assert len(rows) == 2
+    assert {row["node_name"] for row in rows} == {"GEO_A", "GEO_B"}
+
+    clear_state(client)
+
+
+def test_map_nodes_zone_avg_includes_ungeocoded_nodes(client):
+    """Zone average is computed from all nodes in the zone, not just geocoded ones."""
+    clear_state(client)
+
+    # NORTH zone: 1 geocoded (lmp=10) + 2 non-geocoded (lmp=20, 30)
+    # zone avg must be (10+20+30)/3 = 20, not just 10
+    geocoded = _create_node_full(client, "GEO_A",   zone="NORTH", lat=31.0, lon=-97.0)
+    ungeo_b  = _create_node_full(client, "UNGEO_B", zone="NORTH")
+    ungeo_c  = _create_node_full(client, "UNGEO_C", zone="NORTH")
+
+    post_prices(client, [
+        {"node_id": geocoded, "timestamp_utc": TS1, "lmp": 10.0},
+        {"node_id": ungeo_b,  "timestamp_utc": TS1, "lmp": 20.0},
+        {"node_id": ungeo_c,  "timestamp_utc": TS1, "lmp": 30.0},
+    ])
+
+    r = client.get("/api/prices/map-nodes", params={"grid": "ERCOT"})
+    assert r.status_code == 200
+    rows = r.json()
+    assert len(rows) == 1  # only the geocoded node returned
+    assert abs(rows[0]["zone_avg_lmp"] - 20.0) < 1e-6  # avg of all 3 nodes in zone
+
+    clear_state(client)
+
+
+def test_map_nodes_null_zone_yields_null_zone_avg(client):
+    """A geocoded node with no settlement_load_zone returns zone_avg_lmp=null."""
+    clear_state(client)
+
+    node_id = _create_node_full(client, "NODE_A", zone=None, lat=31.0, lon=-97.0)
+    post_prices(client, [{"node_id": node_id, "timestamp_utc": TS1, "lmp": 50.0}])
+
+    r = client.get("/api/prices/map-nodes", params={"grid": "ERCOT"})
+    assert r.status_code == 200
+    rows = r.json()
+    assert len(rows) == 1
+    assert abs(rows[0]["lmp"] - 50.0) < 1e-6
+    assert rows[0]["zone_avg_lmp"] is None
+
+    clear_state(client)
+
+
+def test_map_nodes_no_prices_yields_null_lmp(client):
+    """A geocoded node with no prices at all appears with lmp=null and zone_avg_lmp=null."""
+    clear_state(client)
+
+    _create_node_full(client, "NODE_A", zone="NORTH", lat=31.0, lon=-97.0)
+    # no prices inserted
+
+    r = client.get("/api/prices/map-nodes", params={"grid": "ERCOT"})
+    assert r.status_code == 200
+    rows = r.json()
+    assert len(rows) == 1
+    assert rows[0]["lmp"] is None
+    assert rows[0]["zone_avg_lmp"] is None
+
+    clear_state(client)
+
+
+def test_map_nodes_empty_when_no_geocoded_nodes(client):
+    """Returns empty list when no nodes in the grid have coordinates."""
+    clear_state(client)
+
+    ungeo = _create_node_full(client, "NODE_A", zone="NORTH")  # no lat/lon
+    post_prices(client, [{"node_id": ungeo, "timestamp_utc": TS1, "lmp": 10.0}])
+
+    r = client.get("/api/prices/map-nodes", params={"grid": "ERCOT"})
+    assert r.status_code == 200
+    assert r.json() == []
+
+    clear_state(client)
