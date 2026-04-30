@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, memo } from 'react'
 import Map, { Source, Layer } from 'react-map-gl/maplibre'
 import type { MapLayerMouseEvent } from 'react-map-gl/maplibre'
 import 'maplibre-gl/dist/maplibre-gl.css'
+import { BASE_URL } from '../api/client'
 
 const MAP_STYLE = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json'
 const POLL_MS = 5000
@@ -95,7 +96,7 @@ export default memo(function MapView() {
         const load = async () => {
             try {
                 const results = await Promise.all(
-                    GRIDS.map(g => fetch(`/api/prices/map-nodes?grid=${g}`).then(r => r.ok ? r.json() : []))
+                    GRIDS.map(g => fetch(`${BASE_URL}/api/prices/map-nodes?grid=${g}`).then(r => r.ok ? r.json() : []))
                 )
                 if (!cancelled) setNodes(results.flat())
             } catch {

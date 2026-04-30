@@ -1,6 +1,6 @@
 import type { ZonePrice, NodeLocation, PricePoint } from '../types/market'
 
-const BASE_URL = import.meta.env.VITE_BACKEND_URL ?? ''
+export const BASE_URL = import.meta.env.VITE_BACKEND_URL ?? ''
 
 export async function fetchLatestZonePrices(grid: string): Promise<ZonePrice[]> {
     const response = await fetch(`${BASE_URL}/api/prices/zone-summary?grid=${encodeURIComponent(grid)}`)
