@@ -156,6 +156,7 @@ def _thread_excepthook(args):
         f"Unhandled exception in thread {args.thread.name}, exiting",
         exc_info=(args.exc_type, args.exc_value, args.exc_traceback),
     )
+    sentry_sdk.flush(timeout=2)  # os._exit bypasses atexit handlers, so flush explicitly
     os._exit(1)
 
 
