@@ -1,6 +1,6 @@
 import pytest
 
-from ercot_client import ERCOTClient
+from ercot.client import ERCOTClient
 
 pytestmark = pytest.mark.integration
 
