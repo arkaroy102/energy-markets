@@ -15,3 +15,13 @@ export type PricePoint = {
     timestamp_utc: string
     lmp: number
 }
+
+export type MapNode = {
+    node_id: number
+    node_name: string
+    latitude: number
+    longitude: number
+    settlement_load_zone: string | null
+    lmp: number | null
+    zone_avg_lmp: number | null
+}

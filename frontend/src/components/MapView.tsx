@@ -2,23 +2,14 @@ import { useState, useEffect, useCallback, memo } from 'react'
 import Map, { Source, Layer } from 'react-map-gl/maplibre'
 import type { MapLayerMouseEvent } from 'react-map-gl/maplibre'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import { BASE_URL } from '../api/client'
+import { fetchMapNodes } from '../api/client'
+import type { MapNode } from '../types/market'
 
 const MAP_STYLE = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json'
 const POLL_MS = 5000
 const GRIDS = ['ERCOT', 'NYISO']
 const SOURCE_ID = 'nodes'
 const UNCLUSTERED_ID = 'nodes-unclustered'
-
-interface MapNode {
-    node_id: number
-    node_name: string
-    latitude: number
-    longitude: number
-    settlement_load_zone: string | null
-    lmp: number | null
-    zone_avg_lmp: number | null
-}
 
 interface TooltipState {
     node_name: string
@@ -95,9 +86,7 @@ export default memo(function MapView() {
         let cancelled = false
         const load = async () => {
             try {
-                const results = await Promise.all(
-                    GRIDS.map(g => fetch(`${BASE_URL}/api/prices/map-nodes?grid=${g}`).then(r => r.ok ? r.json() : []))
-                )
+                const results = await Promise.all(GRIDS.map(g => fetchMapNodes(g)))
                 if (!cancelled) setNodes(results.flat())
             } catch {
                 // retain stale data on network error
