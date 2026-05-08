@@ -3,7 +3,7 @@ import pytest
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from ercot_api import TokenManager, ErcotClient
+from ercot.api import TokenManager, ErcotClient
 
 pytestmark = pytest.mark.integration
 

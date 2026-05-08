@@ -10,7 +10,7 @@ import openpyxl
 import requests
 
 from grid_client import GridClient, PriceRecord
-from ercot_api import ErcotClient as ErcotAPIClient
+from ercot.api import ErcotClient as ErcotAPIClient
 
 logger = logging.getLogger(__name__)
 
