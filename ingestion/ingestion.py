@@ -13,7 +13,8 @@ logger = logging.getLogger(__name__)
 import backend_client
 from grid_client import GridClient, PriceRecord
 
-poll_period = 2  # seconds
+poll_period = 2  # seconds, used when waiting for new data
+sced_interval = 300  # seconds, sleep after a successful price update
 num_workers = 4  # 2 for steady state (2 pages per SCED interval), 4 for catch-up mode
 metrics_log_interval = 10
 
@@ -62,12 +63,14 @@ def fetcher(client: GridClient, max_lookback_days: int):
         t0 = time.perf_counter()
         now = datetime.now(timezone.utc)
 
+        got_records = False
         t0_page = time.perf_counter()
         for records in client.iter_pages(start=maxtime + timedelta(seconds=1), end=now):
             t0_1 = time.perf_counter()
             grid_api_time = t0_1 - t0_page
 
             if records:
+                got_records = True
                 item = {
                     "records": records,
                     "starttime": t0,
@@ -86,7 +89,10 @@ def fetcher(client: GridClient, max_lookback_days: int):
             t0_page = time.perf_counter()
 
         logger.info(f"Received maxtime: {maxtime}")
-        time.sleep(poll_period)
+        near_live = (datetime.now(timezone.utc) - maxtime) <= timedelta(seconds=sced_interval)
+        sleep_s = sced_interval if (got_records and near_live) else poll_period
+        logger.info(f"Sleeping {sleep_s}s ({'sced interval' if got_records and near_live else 'poll period'})")
+        time.sleep(sleep_s)
         batch_id += 1
 
 
