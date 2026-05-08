@@ -22,6 +22,16 @@ AUTH_URL = "https://ercotb2c.b2clogin.com/ercotb2c.onmicrosoft.com/B2C_1_PUBAPI-
 &client_id=fec253ea-0d06-4272-a5e6-b478baeecd70\
 &response_type=id_token"
 
+_NETWORK_ERRORS = (
+    requests.exceptions.SSLError,
+    requests.exceptions.ConnectionError,
+    requests.exceptions.Timeout,
+    requests.exceptions.ConnectTimeout,
+    requests.exceptions.ReadTimeout,
+    requests.exceptions.ChunkedEncodingError,
+)
+
+
 class TokenManager():
     def __init__(self, username, password):
         self.auth_url = AUTH_URL.format(username=username, password=password)
@@ -86,33 +96,25 @@ class ErcotClient:
         for attempt in range(max_retries + 1):
             try:
                 resp = self._session.get(ERCOT_LMP_URL, headers=headers, params=params, timeout=timeout)
-                if resp.status_code < 400:
+                if resp.status_code == 200:
                     return resp.json()
-                elif resp.status_code == 429:
-                    retry_after = resp.headers.get("Retry-After")
-                    if retry_after is not None:
-                        sleep_s = float(retry_after)
-                    else:
-                        sleep_s = backoff
-                        logger.warning(f"Rate limited, sleeping for {sleep_s} seconds")
                 elif resp.status_code == 401:
-                    logger.warning("Token expired, refreshing")
+                    logger.warning("ERCOT token expired, refreshing")
                     self._token_manager.force_refresh()
                     headers["Authorization"] = f"Bearer {self._token_manager.get_token()}"
-                    continue
+                elif resp.status_code == 429:
+                    logger.warning(f"ERCOT rate limited, sleeping {backoff}s (attempt {attempt})")
+                elif resp.status_code >= 500:
+                    logger.warning(f"ERCOT server error {resp.status_code} (attempt {attempt})")
                 else:
                     resp.raise_for_status()
-
-                if attempt == max_retries:
-                    raise RuntimeError(f"Rate limited after {max_retries} retries: {resp.text}")
-            except (requests.exceptions.SSLError,
-                    requests.exceptions.ConnectionError,
-                    requests.exceptions.Timeout,
-                    requests.exceptions.ChunkedEncodingError) as e:
-                logger.warning(f"Request error {e}, closing session and retrying")
+            except _NETWORK_ERRORS as e:
+                logger.warning(f"ERCOT network error: {e}, retrying (attempt {attempt})")
                 self._session.close()
                 self._session = requests.Session()
-                continue
-            time.sleep(sleep_s)
-            backoff *= 2
-        raise RuntimeError(f"Reached max retries")
+
+            if attempt < max_retries:
+                time.sleep(backoff)
+                backoff *= 2
+
+        raise RuntimeError(f"ERCOT _fetch_page failed after {max_retries} retries")
