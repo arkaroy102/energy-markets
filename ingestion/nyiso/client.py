@@ -84,9 +84,24 @@ class NYISOClient(GridClient):
         logger.info(f"NYISO live: {len(records)} new records")
         return records
 
+    @staticmethod
+    def _is_valid_row(row: dict) -> bool:
+        ts = row.get("Time Stamp")
+        name = row.get("Name")
+        lbmp = row.get("LBMP ($/MWHr)")
+        return (
+            ts is not None and "\x00" not in ts
+            and name is not None
+            and lbmp is not None
+        )
+
     def _parse_rows(self, rows: list[dict], after: datetime, before: datetime | None = None) -> list[PriceRecord]:
         records = []
+        skipped = 0
         for row in rows:
+            if not self._is_valid_row(row):
+                skipped += 1
+                continue
             ts = (
                 datetime.strptime(row["Time Stamp"], _TS_FMT)
                 .replace(tzinfo=_et)
@@ -101,6 +116,9 @@ class NYISOClient(GridClient):
                 timestamp_utc=ts,
                 lmp=float(row["LBMP ($/MWHr)"]),
             ))
+
+        if skipped:
+            logger.warning(f"NYISO _parse_rows: skipped {skipped} invalid rows")
 
         if records:
             self._last_interval_ts = max(r.timestamp_utc for r in records)

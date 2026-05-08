@@ -86,6 +86,42 @@ def test_iter_pages_uses_catchup_when_end_is_old():
 
 
 # ---------------------------------------------------------------------------
+# _is_valid_row
+# ---------------------------------------------------------------------------
+
+def test_is_valid_row_accepts_valid_row():
+    assert NYISOClient._is_valid_row(make_row("04/09/2026 09:30:00")) is True
+
+
+def test_is_valid_row_rejects_none_timestamp():
+    row = make_row("04/09/2026 09:30:00")
+    row["Time Stamp"] = None
+    assert NYISOClient._is_valid_row(row) is False
+
+
+def test_is_valid_row_rejects_null_bytes_in_timestamp():
+    row = make_row("04/09/2026 09:30:00")
+    row["Time Stamp"] = "\x00" * 96
+    assert NYISOClient._is_valid_row(row) is False
+
+
+def test_is_valid_row_rejects_none_name():
+    row = make_row("04/09/2026 09:30:00")
+    row["Name"] = None
+    assert NYISOClient._is_valid_row(row) is False
+
+
+def test_is_valid_row_rejects_none_lbmp():
+    row = make_row("04/09/2026 09:30:00")
+    row["LBMP ($/MWHr)"] = None
+    assert NYISOClient._is_valid_row(row) is False
+
+
+def test_is_valid_row_rejects_missing_keys():
+    assert NYISOClient._is_valid_row({}) is False
+
+
+# ---------------------------------------------------------------------------
 # _parse_rows
 # ---------------------------------------------------------------------------
 
